@@ -5,7 +5,7 @@ summary: Why claims are anchored by marker comments in the files that uphold the
 covers: [SPEC.md]
 links:
   - { to: freshness, rel: related, note: "marker regions are the main staleness signal" }
-verified_at: 95d185d
+verified: 2026-10-15
 review_after: 90d
 ---
 
@@ -26,14 +26,17 @@ Files point at claims, rather than claims pointing at files.
 A marker comment moves with its code through renames and refactors, works in any language with comments, and is findable with plain grep. Claims pointing at file paths and line numbers would break on every move.
 Rejected: AST-based symbol anchors as the baseline. They're more precise but language-specific; they become an optional adapter instead (PLAN-1).
 
-- date: 2026-10-15
-
 ### DEC-2
 A marker's verb sets how strongly a change near it affects the claim.
 
 `enforces` means this code makes the claim true, `implements` means it carries the claim out, and `see` is informational and never flags anything. Three verbs keep the grammar small enough to remember.
+Rejected: a single verb, which can't tell code that makes a claim true from code that merely mentions it.
 
-- date: 2026-10-15
+### DEC-3
+In markdown, only markers inside HTML comments count, and never inside fenced code or inline code.
+
+Markdown files can uphold claims (this repo anchors every invariant in `SPEC.md`), but they also show markers as examples. Requiring an HTML comment outside code separates the two with one rule.
+Rejected: skipping fenced blocks only, which still miscounted an example in inline code (`<!-- … -->` in backticks) as a real anchor.
 
 ## Limits
 
@@ -49,10 +52,16 @@ Markers work in any file that has comments, including markdown.
 
 An inline HTML comment (`<!-- @lore enforces format#INV-1 -->`) is invisible when rendered. This repo uses that to anchor claims to the `SPEC.md` rules that uphold them.
 
+- status: superseded
+- superseded_by: markers#DEC-3
+
 ### QRK-2
 Example markers inside fenced code blocks look exactly like real markers.
 
 `SPEC.md` and `README.md` show markers pointing at a sample `moderation` node that doesn't exist. A grep-based scanner reads these as broken references unless it skips fenced code blocks in markdown.
+
+- status: superseded
+- superseded_by: markers#DEC-3
 
 ## Plans
 

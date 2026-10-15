@@ -1,4 +1,4 @@
-# Lore Spec — v0 (draft)
+# Lore Spec — v0.1 (draft)
 
 > **L**inked **O**bservations, **R**ationale & **E**dges
 
@@ -84,7 +84,7 @@ summary: Pre-publish content screening via LLM classifier with a rules fallback.
 covers: [src/moderation/**, src/api/posts/create.ts]
 links:
   - { to: llms, rel: depends_on, note: "classifier model choice, see DEC-3" }
-verified_at: a1b2c3d
+verified: 2026-10-15
 ---
 
 # Moderation
@@ -108,8 +108,6 @@ Use a small hosted classifier instead of a frontier model for first-pass screeni
 
 The p95 latency budget for post creation is 200ms. Frontier models measured 800ms+.
 Rejected: async-only moderation (would violate INV-1 or block the UI).
-
-- date: 2026-09-14
 ```
 
 ### 4.1 Frontmatter
@@ -121,11 +119,17 @@ Rejected: async-only moderation (would violate INV-1 or block the UI).
 | `summary` | yes | One sentence. Lets a reader decide whether to open the node. |
 | `covers` | no | Globs of files this node describes. Drives node-level staleness. |
 | `links` | no | Typed outbound links: `{ to, rel, note? }`. |
-| `verified_at` | no | Commit SHA at which a human or agent last confirmed the node is accurate. |
-| `review_after` | conditional | Date (`2027-01-15`) or duration (`90d`) after `verified_at`. Required when the node has no `covers` and no markers point at it. |
+| `verified` | no | Date (`2026-10-15`) a human or agent last confirmed the node is accurate. See §4.1.1. |
+| `review_after` | conditional | Date (`2027-01-15`) or duration (`90d`) after `verified`. Required when the node has no `covers` and no markers point at it. |
 | `status` | no | `active` (default) \| `deprecated` |
 
-`APP.md` additionally carries `spec: lore/0`.
+`APP.md` additionally carries `spec: lore/0.1`.
+
+#### 4.1.1 Verification commit
+
+The **verification commit** of a node is the commit that last changed its `verified:` line. Tools MUST derive it with `git blame` rather than read a SHA from the file. <!-- @lore enforces freshness#DEC-3 -->
+
+This lets an edit and its verification land in the same commit: a commit cannot contain its own SHA, but blame can point at it afterwards. Without git history (e.g. a tarball), tools fall back to comparing the `verified` date against file modification dates.
 
 Link `rel` values: `depends_on`, `interacts_with`, `related`. Tools MUST accept unknown values and treat them as `related`.
 
@@ -133,20 +137,21 @@ Link `rel` values: `depends_on`, `interacts_with`, `related`. Tools MUST accept 
 
 1. One `# Title` (H1).
 2. Optional free-form `##` sections (e.g. `## Context`). These MUST NOT contain claims.
-3. Claim sections, in this order, each optional: Invariants, Decisions, Edges, Limits, Quirks, Plans.
+3. Claim sections, each optional. They SHOULD appear in this order: Invariants, Decisions, Edges, Limits, Quirks, Plans. Order carries no meaning, so formatters MAY reorder sections and lint MUST NOT treat order as an error. <!-- @lore enforces format#DEC-7 -->
 
 ### 4.3 Claims
 
 - A claim is an `###` heading containing **only** its local ID: `### INV-1`. No title text, so the anchor (`#inv-1`) never changes when wording does.
 - The claim's prefix MUST match its section.
 - **The first paragraph is the claim.** It SHOULD be one sentence of ≤ 30 words. Everything after it is rationale and context.
+- **A `DEC` claim SHOULD include a line starting with `Rejected:`** naming the alternatives that were considered and why each lost. This is often the most useful line for an agent, because it stops ideas that were already ruled out from being proposed again. <!-- @lore enforces format#DEC-6 -->
 - A claim MAY end with a metadata list. Each item is `- key: value`. Recognized keys:
 
 | Key | Meaning |
 |---|---|
 | `status` | `active` (default) \| `superseded` \| `retired` |
 | `superseded_by` | Reference to the replacing claim. Implies `status: superseded`. |
-| `date` | When the claim was made (`YYYY-MM` or `YYYY-MM-DD`). Recommended for `DEC`. |
+| `date` | Optional. Only for a claim recorded after the fact (`YYYY-MM` or `YYYY-MM-DD`); otherwise git history already dates it. |
 | `review_after` | Date or duration. Required for `PLAN`. |
 | `tests` | Comma-separated paths to tests that enforce this claim. |
 
@@ -180,7 +185,18 @@ if (post.status !== 'visible') return notFound()
 | `see` | Related; read the claim for context. | none |
 
 - Markers MUST use full references. <!-- @lore enforces markers#INV-1 -->
+- **Placement:** a marker MAY sit on the line above the code it anchors, or at the end of the first line it anchors.
 - **Region (v0 heuristic):** a marker anchors from its own line to the next blank line or the next marker, capped at 50 lines. Language-aware adapters (e.g. tree-sitter) MAY narrow this to the enclosing symbol.
+
+### 5.1 Markers in markdown
+
+Markdown files (specs, READMEs, runbooks) can anchor claims too. In a markdown file, a marker MUST be inside an HTML comment, which renders invisibly:
+
+```markdown
+1. Retries are capped at three. <!-- @lore enforces jobs#INV-2 -->
+```
+
+Tools MUST ignore markers inside fenced code blocks and inline code spans in markdown. Those are examples, not anchors. <!-- @lore enforces markers#DEC-3 -->
 
 ## 6. Graph
 
@@ -198,7 +214,7 @@ Behavior where two nodes meet is recorded as an `EDGE` claim in the node on the 
 
 ## 7. Trust
 
-Every active claim has a trust tier, highest first:
+Every active `INV`, `EDGE`, `LIM` and `QRK` claim has a trust tier, highest first:
 
 | Tier | Condition |
 |---|---|
@@ -206,7 +222,9 @@ Every active claim has a trust tier, highest first:
 | **anchored** | At least one `enforces` or `implements` marker points at it. |
 | **asserted** | Prose only. |
 
-A claim's **freshness** is separate from its tier: a claim is **stale** when its anchors changed after the node's `verified_at` (§8), or when `review_after` has passed.
+`DEC` and `PLAN` claims have no tier. They record history and intent, which nothing can enforce, so tools MUST NOT count them as asserted. <!-- @lore enforces freshness#DEC-4 -->
+
+A claim's **freshness** is separate from its tier: a claim is **stale** when its anchors changed after the node's verification commit (§4.1.1, §8), or when `review_after` has passed.
 
 Readers (including agents) SHOULD weight claims by tier and freshness. Tools SHOULD surface both.
 
@@ -245,6 +263,8 @@ Given a diff (a PR or a commit range), a claim is **affected** when:
 | `L010` | warn | Node over 300 lines |
 | `L011` | warn | Claim's first paragraph over 30 words |
 | `L012` | warn | Claim heading contains text besides the ID |
+| `L013` | info | `DEC` claim without a `Rejected:` line |
+| `L014` | info | Claim sections out of the recommended order (fixable by a formatter) |
 
 ## 11. Conformance levels
 
@@ -261,7 +281,21 @@ An L4 agent MUST only edit affected nodes, MUST NOT delete claims, and MUST NOT 
 
 ## 12. Open questions
 
-- Should `verified_at` live per claim (more precise) or per node (less noise)? v0 says node.
+- Should `verified` live per claim (more precise) or per node (less noise)? v0.1 says node.
 - Is the 50-line marker region heuristic good enough before tree-sitter?
-- Should `covers` be allowed on claims, not just nodes?
+- Should `covers` be allowed on claims, not just nodes? Should it accept heading anchors in markdown (`SPEC.md#5-markers`) so a shared file doesn't flag every node?
 - How should a node be renamed? (Every reference to it breaks. Candidate: a `moved_to:` tombstone node.)
+- Root-to-node links need a `docs/` prefix that node-to-node links don't. Accept both forms, or move the root into `docs/`?
+
+## 13. Changelog
+
+### v0.1 (2026-10-15)
+
+From dogfooding v0 on this repository:
+
+- `verified_at: <sha>` → `verified: <date>`; the verification commit comes from `git blame` (§4.1.1). Fixes nodes being born stale.
+- Markers in markdown are defined: HTML comments only; fenced code and inline code are ignored (§5.1). Markers may sit at the end of a line (§5).
+- Trust tiers exclude `DEC` and `PLAN` claims (§7).
+- `Rejected:` line recommended for decisions (§4.3); new info rule `L013`.
+- Section order is a recommendation, not an error (§4.2); new info rule `L014`.
+- `date` metadata is optional and only for claims recorded after the fact (§4.3).

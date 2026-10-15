@@ -5,7 +5,7 @@ summary: Why every capability above plain markdown is an opt-in layer, and the r
 covers: [SPEC.md, README.md]
 links:
   - { to: freshness, rel: depends_on, note: "L3/L4 run the staleness rules" }
-verified_at: 95d185d
+verified: 2026-10-15
 review_after: 90d
 ---
 
@@ -33,14 +33,11 @@ Agents propose doc updates; humans approve them in PR review.
 Left alone, agents bloat prose, smooth over nuance and occasionally hallucinate. Normal PR review already exists, so it costs nothing extra.
 Rejected: autonomous rewriting of docs.
 
-- date: 2026-10-15
-
 ### DEC-2
 The agent step runs only when the deterministic step finds affected claims.
 
 Most PRs touch nothing documented, so they cost $0 and finish fast.
-
-- date: 2026-10-15
+Rejected: running the agent on every PR.
 
 ## Quirks
 

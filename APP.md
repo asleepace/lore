@@ -1,9 +1,9 @@
 ---
-spec: lore/0
+spec: lore/0.1
 scope: app
 summary: Lore is a markdown format, plus optional tooling, for an agent-maintained knowledge graph of a repo's rationale, invariants, edges and quirks.
 covers: [SPEC.md, README.md]
-verified_at: 95d185d
+verified: 2026-10-15
 review_after: 90d
 ---
 
@@ -33,15 +33,11 @@ Lore documents only what code cannot express.
 Docs that restate code rot first, because every code change makes them wrong. Rationale, invariants, cross-module behavior and accepted limits change far less often, and nothing else records them.
 Rejected: auto-generated "what the code does" wikis, which are cheap to produce but answer the wrong question.
 
-- date: 2026-10-15
-
 ### DEC-2
 One graph per repository.
 
 Cross-repo links can't be verified atomically because each repo has its own history. Higher-level graphs can come later as federation.
 Rejected: org-level graphs in v0.
-
-- date: 2026-10-15
 
 ## Limits
 

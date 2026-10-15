@@ -5,7 +5,7 @@ summary: Why Lore signals how much to trust each claim, and how staleness is det
 covers: [SPEC.md]
 links:
   - { to: markers, rel: depends_on, note: "marker regions drive claim-level staleness" }
-verified_at: 95d185d
+verified: 2026-10-15
 review_after: 90d
 ---
 
@@ -23,19 +23,28 @@ Detection runs on every PR. It must be deterministic, fast and free, so that the
 ## Decisions
 
 ### DEC-1
-Verification is recorded once per node (`verified_at`), not as commit hashes on each section.
+Verification is recorded once per node (`verified`), not as commit hashes on each section.
 
 Git already provides per-line history through `blame` and `log -L`.
 Rejected: inline commit hashes per section, which add churn, noisy diffs and merge conflicts.
-
-- date: 2026-10-15
 
 ### DEC-2
 Trust tier and freshness are separate axes.
 
 The tier (tested, anchored, asserted) says how a claim is backed. Freshness says whether that backing changed since someone last checked. A tested claim can still be stale.
+Rejected: a single combined trust score, which hides whether a claim is weakly backed or just unchecked.
 
-- date: 2026-10-15
+### DEC-3
+A node's verification commit is derived from `git blame` of its `verified:` line, not stored as a SHA.
+
+A commit can't contain its own SHA, so a stored SHA always pointed one commit back, and every node was stale the moment it landed (QRK-1). Blame points at the right commit after the fact, and the file keeps a date a human can read.
+Rejected: a stored `verified_at` SHA (v0). Rejected: having tools rewrite the SHA in a follow-up commit, which doubles commits and puts tool state in docs ([layers#INV-2](layers.md#inv-2)).
+
+### DEC-4
+`DEC` and `PLAN` claims have no trust tier.
+
+They record history and intent, which nothing can enforce. In v0, counting them as "asserted" made this repo look 77% unbacked when all 8 invariants were anchored.
+Rejected: a separate "historical" tier, which is a tier in name only.
 
 ## Edges
 
@@ -57,3 +66,6 @@ A node with no `covers` and no markers can only go stale by date.
 `verified_at` cannot name the commit that sets it.
 
 A commit can't contain its own SHA. Verifying a node in the same commit that edits it can only record the parent commit, which looks one commit stale.
+
+- status: superseded
+- superseded_by: freshness#DEC-3

@@ -34,7 +34,7 @@ Every layer is opt-in. If all tooling is deleted, the docs remain valid, useful 
 
 ## Status
 
-Early design. See [`SPEC.md`](SPEC.md) for the v0 draft.
+Early design. See [`SPEC.md`](SPEC.md) for the v0.1 draft.
 
 ## License
 
