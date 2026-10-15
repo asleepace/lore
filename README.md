@@ -1,5 +1,7 @@
 # Lore
 
+> **L**inked **O**bservations, **R**ationale & **E**dges
+
 A living, agent-maintained knowledge graph for a codebase, written in plain markdown and checked into git.
 
 Lore captures what code can't say: the **why**, the **invariants**, the **decisions**, the **edge cases** where modules meet, and the **quirks** you only learn by breaking them. It doesn't restate what the code already does.
