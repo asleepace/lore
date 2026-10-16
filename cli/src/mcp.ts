@@ -5,6 +5,7 @@ import { digest } from './digest';
 import { checkGates } from './gate';
 import { loadGraph } from './graph';
 import { history } from './history';
+import { find, show, showNode, trace } from './query';
 import { diffFor, selectClaims } from './select';
 import { tierOf } from './tiers';
 import { normalizeRef } from './util';
@@ -69,6 +70,66 @@ export const TOOLS: Tool[] = [
         : selectClaims(g, diffFor(root, (i.range as string | undefined) ?? 'HEAD'), { covers: false }).filter((r) => r.severity !== 'low');
       return check(g, wanted).map(({ ref, kind, statement, severity, question, prompt }) => ({ ref, kind, statement, severity, question, prompt }));
     },
+  },
+  {
+    name: 'lore_show',
+    title: 'One claim or node, with its edges',
+    description:
+      'A claim with its full text, tier, where its code is (file:line), and every edge: what it depends on, what depends on it, what it mentions, what mentions it, and claims upheld by the same code. A node ID gives its summary, children and claim list. Cheaper than reading the node file.',
+    inputSchema: { type: 'object', properties: { refs: { type: 'array', items: { type: 'string' }, description: 'Claim references (room#INV-2) or node IDs (room).' } }, required: ['refs'] },
+    annotations: readOnly,
+    run: (root, i) => {
+      const g = loadGraph(root);
+      return ((i.refs as string[]) ?? []).map((r) => (r.includes('#') ? show(g, r) : showNode(g, r)) ?? { ref: r, error: 'no such claim or node' });
+    },
+  },
+  {
+    name: 'lore_trace',
+    title: 'What rests on a claim, node or file',
+    description:
+      'Claims connected to a start, breadth-first, each with its hop count and how it was reached. Start from claim refs, node IDs or file paths (a file starts from every claim anchored in it). direction "down" (default) lists what rests on the starts, so what changing them can break; "up" what they rest on. Use it before changing an invariant or a file that upholds one.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'array', items: { type: 'string' }, description: 'Claim refs, node IDs, or repository paths (files, directories, globs).' },
+        direction: { type: 'string', enum: ['down', 'up', 'both'], default: 'down' },
+        depth: { type: 'integer', minimum: 0, default: 3, description: 'Hops along depends and mentions.' },
+        code: { type: 'boolean', default: true, description: 'Include claims upheld by the same code (one hop).' },
+      },
+      required: ['from'],
+    },
+    annotations: readOnly,
+    run: (root, i) =>
+      trace(loadGraph(root), (i.from as string[]) ?? [], {
+        direction: (i.direction as 'down' | 'up' | 'both' | undefined) ?? 'down',
+        depth: Number(i.depth ?? 3),
+        code: i.code !== false,
+      }).rows.map(({ ref, kind, statement, hop, via }) => ({ ref, kind, hop, via, statement })),
+  },
+  {
+    name: 'lore_find',
+    title: 'Find claims',
+    description:
+      'Claims matching every filter given: words in the text, kind (INV, DEC, NOTE), a node and the nodes under it, a file they are anchored in, or an invariant tier (tested, anchored, asserted).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: str('Words that must all appear (case-insensitive).'),
+        kind: { type: 'array', items: { type: 'string', enum: ['INV', 'DEC', 'NOTE'] } },
+        node: str('A node ID; includes the nodes under it in the map.'),
+        file: str('A file, directory or glob the claims are anchored in.'),
+        tier: { type: 'string', enum: ['tested', 'anchored', 'asserted'] },
+      },
+    },
+    annotations: readOnly,
+    run: (root, i) =>
+      find(loadGraph(root), {
+        text: String(i.text ?? '').split(/\s+/).filter(Boolean),
+        kinds: i.kind as ('INV' | 'DEC' | 'NOTE')[] | undefined,
+        node: i.node as string | undefined,
+        file: i.file as string | undefined,
+        tier: i.tier as 'tested' | 'anchored' | 'asserted' | undefined,
+      }),
   },
   {
     name: 'lore_ask',
@@ -138,7 +199,7 @@ export function handle(root: string, msg: Json): void {
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'lore', title: 'Lore', version: VERSION },
         instructions:
-          "This repository keeps a Lore knowledge graph: invariants (don't break them), decisions (don't re-propose what they rejected) and notes. Read lore_digest before changing code; after changing it, run lore_select, check what it reaches with lore_check_context, and add the trailer from lore_record to your commit.",
+          "This repository keeps a Lore knowledge graph: invariants (don't break them), decisions (don't re-propose what they rejected) and notes. Read lore_digest before changing code, lore_show for one claim, and lore_trace on a claim or file to see what rests on it; after changing it, run lore_select, check what it reaches with lore_check_context, and add the trailer from lore_record to your commit.",
       });
       return;
     }

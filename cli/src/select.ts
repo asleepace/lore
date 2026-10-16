@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { definitionsUsed } from './defs';
 import type { Claim, ClaimRecord, Graph, Severity } from './types';
 import { git, matchesAny, normalizeRef } from './util';
 
@@ -102,6 +105,22 @@ export function selectClaims(graph: Graph, diff: Diff, opts: { covers?: boolean 
         if (c) hit(mk.ref, BY_KIND[c.kind], `changed ${mk.file}:${n} (marker at ${mk.line})`);
         break;
       }
+    }
+  }
+  // A changed definition the region uses (a constant, a helper in the same file) changes what the
+  // region means without touching it: same severity as a change inside it.
+  const fileLines = new Map<string, string[]>();
+  for (const mk of graph.markers) {
+    if (mk.verb !== 'upholds') continue;
+    const changed = diff.changed.get(mk.file);
+    if (!changed?.size) continue;
+    const abs = join(graph.root, mk.file);
+    if (!fileLines.has(mk.file)) fileLines.set(mk.file, existsSync(abs) ? readFileSync(abs, 'utf8').split('\n') : []);
+    const c = graph.claims.get(mk.ref);
+    if (!c) continue;
+    for (const d of definitionsUsed(fileLines.get(mk.file)!, mk.line, mk.endLine)) {
+      const n = [...changed].find((l) => l >= d.start && l <= d.end);
+      if (n !== undefined) hit(mk.ref, BY_KIND[c.kind], `changed ${d.name} (${mk.file}:${n}), used by the marker at ${mk.line}`);
     }
   }
   for (const [file, refs] of diff.removedRefs) {

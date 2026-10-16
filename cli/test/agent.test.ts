@@ -3,7 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { check, parseVerdict, promptFor } from '../src/check';
 import { loadGraph } from '../src/graph';
-import { BASE, makeRepo, type Repo } from './helpers';
+import { AT, BASE, makeRepo, type Repo } from './helpers';
 
 let repo: Repo | undefined;
 afterEach(() => repo?.cleanup());
@@ -34,6 +34,21 @@ describe('check', () => {
     expect(p).toContain('Tests that enforce it: test/room.test.ts');
     expect(p).toContain('VERDICT: holds');
     expect(promptFor(g, g.claims.get('room#INV-1')!)).toBe(p);
+  });
+
+  test('the prompt adds top-level definitions the region uses from elsewhere in its file, not locals or other objects\' properties', () => {
+    const pad = '\n'.repeat(20);
+    repo = makeRepo({
+      ...BASE,
+      'src/room/room.ts': `/** Players a room holds. */\nconst MAX_SEATS = 8;\n${pad}function isHost(from: string, host: string): boolean {\n  return from === host;\n}\n${pad}function length() {\n  return 0;\n}\n${pad}export function setState(from: string, host: string, seats: { length: number }) {\n  const MAX_LOCAL = 1;\n  // ${AT} room#INV-1\n  if (!isHost(from, host) || seats.length > MAX_SEATS + MAX_LOCAL) throw new Error('not_host');\n}\n`,
+    });
+    const g = loadGraph(repo.dir);
+    const p = promptFor(g, g.claims.get('room#INV-1')!);
+    expect(p).toContain('Definitions the code above uses, from elsewhere in the same file:');
+    expect(p).toContain('--- src/room/room.ts:1-2\n    1  /** Players a room holds. */\n    2  const MAX_SEATS = 8;');
+    expect(p).toContain('--- src/room/room.ts:23-25\n   23  function isHost(');
+    expect(p).not.toContain('function length()'); // `seats.length` is a property, not this function
+    expect(p).toContain('read it first, or answer unsure');
   });
 
   test('verdicts are read from the first VERDICT line; anything else is unsure', () => {
@@ -114,7 +129,7 @@ describe('mcp', () => {
 
     expect((replies[1]!.result as { protocolVersion: string }).protocolVersion).toBe('2025-06-18');
     const tools = (replies[2]!.result as { tools: { name: string; inputSchema: object }[] }).tools;
-    expect(tools.map((t) => t.name)).toEqual(['lore_digest', 'lore_select', 'lore_check_context', 'lore_ask', 'lore_gate', 'lore_record', 'lore_history', 'lore_lint']);
+    expect(tools.map((t) => t.name)).toEqual(['lore_digest', 'lore_select', 'lore_check_context', 'lore_show', 'lore_trace', 'lore_find', 'lore_ask', 'lore_gate', 'lore_record', 'lore_history', 'lore_lint']);
     const text = (id: number) => ((replies[id]!.result as { content: { text: string }[] }).content[0]!.text);
     expect(text(3)).toContain('room#INV-1');
     const prepared = JSON.parse(text(4)) as { ref: string; prompt: string }[];

@@ -10,12 +10,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { ask } from './ask';
+import { bench, type BenchSummary, type CaseResult } from './bench';
 import { check, sweepTargets, type CheckRecord } from './check';
 import { digest } from './digest';
 import { checkGates } from './gate';
 import { linkFor, loadGraph } from './graph';
 import { serve } from './mcp';
 import { history } from './history';
+import { find, show, showNode, trace, type NodeShown, type Shown, type TraceRow } from './query';
 import { diffFor, selectClaims } from './select';
 import { tierOf } from './tiers';
 import type { ClaimRecord, Graph, Issue } from './types';
@@ -39,12 +41,22 @@ usage: lore [-C <dir>] [--today YYYY-MM-DD] <command> [options] [--json]
                               without an agent: print the prompts, for a calling agent to answer
   gate [<range>|--staged]   invariant gates for a change; exit 1 if unmet and gate is block
        [--message <file>] [--policy off|warn|block]
+  show <ref|node>...        one claim (or node) with its anchors and every edge, without reading the node
+  trace <ref|node|path>...|- claims connected to these, breadth-first, as a table
+        [--up|--both]         default down: what rests on them, so what a change to them can break
+        [--depth n]           hops along depends and mentions (default 3)
+        [--no-code]           skip claims that share an anchored file (followed one hop only)
+  find [<word>...]          claims matching every filter; records pipe into ask, check, trace
+       [--kind INV,DEC,NOTE] [--node <id>] [--file <path|dir|glob>] [--tier tested|anchored|asserted]
   history <ref>             commits whose message or diff mentions a claim
   record verified|ack <ref>...   print the trailer lines for a commit or PR
   link <ref> [--from <file>]     the markdown link for a reference
+  bench <cases.json>        break claims on purpose in throwaway worktrees; measure selection and checks
+        [--agent <cmd>] [--jobs n] [--only id,...] [--hide <path>] [--rev <rev>]
+                              without an agent, measures selection only; exit 1 on a false confirmation
   mcp                       serve these commands as MCP tools over stdio
 
-Refs are node#PREFIX-n (room#INV-2). "-" reads refs or claim records (JSON) from stdin.`;
+Refs are node#PREFIX-n (room#INV-2). --all includes retired and superseded claims (show, trace, find). "-" reads refs or claim records (JSON) from stdin.`;
 
 interface Args {
   cmd: string;
@@ -55,7 +67,7 @@ interface Args {
 function parseArgs(argv: string[]): Args {
   const flags = new Map<string, string[]>();
   const pos: string[] = [];
-  const takesValue = new Set(['-C', '--depth', '--node', '--files', '--message', '--policy', '--from', '--limit', '--bot', '--agent', '--timeout', '--today']);
+  const takesValue = new Set(['-C', '--depth', '--node', '--files', '--message', '--policy', '--from', '--limit', '--bot', '--agent', '--timeout', '--today', '--kind', '--file', '--tier', '--jobs', '--only', '--hide', '--rev']);
   let cmd = '';
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -102,15 +114,71 @@ function issueText(issues: Issue[]): string {
   return issues.map((i) => `${i.level.padEnd(5)} ${i.code} ${i.where}: ${i.message}`).join('\n') + '\n';
 }
 
-function recordsText(records: ClaimRecord[], extra?: (r: ClaimRecord) => string): string {
+function recordsText(records: ClaimRecord[], extra?: (r: ClaimRecord) => string, label?: (r: ClaimRecord) => string): string {
   if (!records.length) return 'no claims\n';
   return records
     .map((r) => {
-      const head = `${(r.severity ?? r.kind.toLowerCase()).padEnd(6)} ${r.ref}  ${r.statement}`;
+      const head = `${(label ? label(r) : r.severity ?? r.kind.toLowerCase()).padEnd(8)} ${r.ref}  ${r.statement}`;
       const why = r.reasons?.length ? `\n         ${r.reasons.join('; ')}` : '';
       return head + why + (extra ? `\n         ${extra(r)}` : '');
     })
     .join('\n') + '\n';
+}
+
+const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\s+/g, ' ');
+
+/** A markdown table: readable in a terminal, and what an agent reads best. */
+function traceTable(rows: TraceRow[]): string {
+  const head = '| Hop | Claim | Relation | Statement |\n|---|---|---|---|\n';
+  return head + rows.map((r) => `| ${r.hop} | ${r.ref}${r.active ? '' : ' (inactive)'} | ${cell(r.via)} | ${cell(r.statement)} |`).join('\n') + '\n';
+}
+
+function showText(x: Shown | NodeShown): string {
+  if ('id' in x) {
+    const lines = [`${x.id} (${x.path})${x.parent ? `, under ${x.parent}` : ''}`, `  ${x.lead}`];
+    if (x.children.length) lines.push(`  children: ${x.children.join(', ')}`);
+    if (x.openSections.length) lines.push(`  sections: ${x.openSections.join(', ')}`);
+    for (const c of x.claims) lines.push(`  ${c.ref}${c.active ? '' : ' (inactive)'}  ${c.statement}`);
+    return lines.join('\n') + '\n';
+  }
+  const kind = { INV: 'invariant', DEC: 'decision', NOTE: 'note' }[x.kind];
+  const lines = [`${x.ref}  ${kind}${x.tier ? `, ${x.tier}` : ''}${x.active ? '' : ', inactive'}  (${x.at})`, `  ${x.statement}`];
+  for (const p of x.rationale) lines.push(...p.split(/\n(?=Rejected:)/).map((q) => `  ${q.replace(/\s*\n\s*/g, ' ')}`));
+  const anchors = x.anchors.map((a) => (a.line ? `${a.file}:${a.line}-${a.endLine}${a.via === 'see' ? ' (see)' : ''}` : `${a.file} (${a.via})`));
+  const rows: [string, string[]][] = [
+    ['anchored in', anchors],
+    ['depends on', x.edges.dependsOn],
+    ['depended on by', x.edges.dependedOnBy],
+    ['mentions', x.edges.mentions],
+    ['mentioned by', x.edges.mentionedBy],
+    ['superseded by', x.edges.supersededBy],
+    ['supersedes', x.edges.supersedes],
+    ['same code', x.edges.sameCode],
+  ];
+  for (const [k, v] of rows) if (v.length) lines.push(`  ${k}: ${v.join(', ')}`);
+  const meta = Object.entries(x.meta).filter(([k]) => !['depends', 'files', 'tests', 'superseded_by'].includes(k));
+  if (meta.length) lines.push(`  ${meta.map(([k, v]) => `${k}: ${v}`).join('; ')}`);
+  return lines.join('\n') + '\n';
+}
+
+function benchText(results: CaseResult[], s: BenchSummary, checked: boolean): string {
+  const pct = (n: number, d: number) => (d ? `${Math.round((100 * n) / d)}%` : 'n/a');
+  const head = '| Case | Claim | Expect | Selected | Verdict | Outcome |\n|---|---|---|---|---|---|\n';
+  const rows = results
+    .map((r) => `| ${r.id} | ${r.ref} | ${r.expect} | ${r.selected ?? 'no'} | ${r.verdict ?? '-'} | ${r.error ? `error: ${cell(r.error)}` : r.outcome} |`)
+    .join('\n');
+  const lines = [
+    '',
+    `${s.cases} cases: ${s.broken} broken, ${s.holds} intact${s.errors ? `, ${s.errors} errors` : ''}`,
+    `selection reached ${s.selected} of ${s.broken} broken claims (${pct(s.selected, s.broken)})`,
+  ];
+  if (checked) {
+    lines.push(
+      `checks caught ${s.caught} of ${s.broken} (${pct(s.caught, s.broken)}); false confirmations ${s.falseConfirmations}, false alarms ${s.falseAlarms} of ${s.holds}, unsure ${s.unsure}`,
+      `the per-change loop alone (select, then check) caught ${s.caughtBySelection} of ${s.broken}; a sweep catches what checks catch`,
+    );
+  }
+  return head + rows + '\n' + lines.join('\n') + '\n';
 }
 
 function graphJson(g: Graph) {
@@ -249,7 +317,7 @@ export function main(argv: string[]): number {
       const { results, skipped } = checkGates(graph, {
         range: args.pos[0],
         staged: args.flags.has('--staged'),
-        message: msgFile ? readFileSync(msgFile === '-' ? 0 : msgFile, 'utf8') : undefined,
+        message: msgFile ? readFileSync(msgFile === '-' ? 0 : resolvePath(root, msgFile), 'utf8') : undefined,
         bot: bot ? new RegExp(bot) : undefined,
       });
       const unmet = results.filter((r) => r.status === 'unmet');
@@ -263,6 +331,77 @@ export function main(argv: string[]): number {
         return body + tail;
       });
       return policy === 'block' && unmet.length ? 1 : 0;
+    }
+
+    case 'show': {
+      const wanted = refsFrom(args.pos).map((r) => r.ref);
+      if (!wanted.length) return usage('show <ref|node>...');
+      const out = wanted.map((w) => (w.includes('#') ? show(graph, w) : showNode(graph, w)));
+      const missing = wanted.filter((_, i) => !out[i]);
+      if (missing.length) {
+        process.stderr.write(`lore: no claim or node ${missing.join(', ')}\n`);
+        if (missing.length === wanted.length) return 2;
+      }
+      const found = out.filter((x) => !!x);
+      print(json, found.length === 1 ? found[0] : found, () => found.map(showText).join('\n'));
+      return 0;
+    }
+
+    case 'trace': {
+      const inputs = refsFrom(args.pos).map((r) => r.ref);
+      if (!inputs.length) return usage('trace <ref|node|path>... or trace -');
+      const depth = Number(args.flags.get('--depth')?.[0] ?? '3');
+      if (!(depth >= 0)) return usage('--depth must be a number');
+      const direction = args.flags.has('--both') ? 'both' : args.flags.has('--up') ? 'up' : 'down';
+      const { starts, rows } = trace(graph, inputs, { direction, depth, code: !args.flags.has('--no-code'), inactive: args.flags.has('--all') });
+      const empty = starts.filter((s) => !s.refs.length).map((s) => s.input);
+      if (empty.length) process.stderr.write(`lore: nothing found for ${empty.join(', ')}\n`);
+      print(json, rows, () => (rows.length ? traceTable(rows) : 'no claims\n'));
+      return 0;
+    }
+
+    case 'find': {
+      const kinds = (args.flags.get('--kind')?.[0] ?? '').split(',').map((k) => k.trim().toUpperCase()).filter(Boolean);
+      if (kinds.some((k) => !['INV', 'DEC', 'NOTE'].includes(k))) return usage('--kind takes INV, DEC, NOTE');
+      const tier = args.flags.get('--tier')?.[0];
+      if (tier && !['tested', 'anchored', 'asserted'].includes(tier)) return usage('--tier takes tested, anchored, asserted');
+      const node = args.flags.get('--node')?.[0];
+      if (node && !graph.nodes.has(node)) return usage(`no node "${node}"`);
+      const records = find(graph, {
+        text: args.pos,
+        kinds: kinds as ('INV' | 'DEC' | 'NOTE')[],
+        node,
+        file: args.flags.get('--file')?.[0],
+        tier: tier as 'tested' | 'anchored' | 'asserted' | undefined,
+        inactive: args.flags.has('--all'),
+      });
+      print(json, records, () => recordsText(records, undefined, (r) => (r as (typeof records)[number]).tier ?? r.kind.toLowerCase()));
+      return 0;
+    }
+
+    case 'bench': {
+      const casesPath = args.pos[0];
+      if (!casesPath) return usage('bench <cases.json>');
+      const agent = args.flags.get('--agent')?.[0] ?? process.env.LORE_AGENT;
+      const started = Date.now();
+      bench(root, resolvePath(root, casesPath), {
+        agent,
+        jobs: Number(args.flags.get('--jobs')?.[0] ?? '4'),
+        timeoutMs: Number(args.flags.get('--timeout')?.[0] ?? '240') * 1000,
+        rev: args.flags.get('--rev')?.[0],
+        hide: args.flags.get('--hide'),
+        only: args.flags.get('--only')?.[0]?.split(',').map((x) => x.trim()),
+        onResult: (r) => process.stderr.write(`${r.outcome.padEnd(9)} ${r.id}\n`),
+      })
+        .then(({ results, summary }) => {
+          print(json, { agent: agent ?? null, seconds: Math.round((Date.now() - started) / 1000), summary, results }, () => benchText(results, summary, !!agent));
+          process.exit(summary.falseConfirmations ? 1 : 0);
+        })
+        .catch((err: Error) => {
+          process.stderr.write(`lore: ${err.message}\n`);
+          process.exit(2);
+        });
+      return -1;
     }
 
     case 'history': {

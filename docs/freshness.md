@@ -69,6 +69,14 @@ Only invariants have a trust tier.
 Decisions, notes and plans record choices and context, which nothing can enforce; the trial's "asserted" list was mostly limits and quirks that never could be anchored, which made a healthy graph look unbacked. A tier is a question about enforcement, so only claims that can be enforced get one.
 Rejected: tiers for `NOTE` claims, which repeats DEC-4's problem one kind over.
 
+### DEC-9
+A change to a same-file definition that a marker region uses, such as a constant or a helper, reaches the claim at the region's severity.
+
+`check` shows those definitions in the prompt too. `lore bench` on GameRelay found selection reaching 14 of 27 deliberately broken claims, all of them breaks inside a marked region; the definition of a constant or helper the region relies on was the commonest blind spot. Following same-file definitions raised it to 17 without a marker more, deterministically. It is a heuristic for JavaScript-like code, which is why the spec makes it a MAY.
+Rejected: following callers of the marked code, which reaches every claim in a large file. Rejected: definitions across files, which needs a language server, and so a dependency.
+
+- depends: freshness#NOTE-2
+
 ## Edges
 
 ### EDGE-1
@@ -98,12 +106,14 @@ A commit can't contain its own SHA. Verifying a node in the same commit that edi
 ### NOTE-1
 An agent's check can agree with a claim that is no longer true, so a check refreshes freshness but never raises a tier.
 
-The verification loop's value depends on how often this happens, which nobody has measured yet. Keeping "tested" for real tests means a false confirmation can make a claim look fresh, never better enforced than it is.
+The verification loop's value depends on how often this happens. `lore bench` measures it: on GameRelay, 3 false confirmations in 47 checks with the first prompt and 0 in 53 with the current one ([cli#NOTE-5](cli.md#note-5)), on breaks the checking model also wrote. Keeping "tested" for real tests means a false confirmation can make a claim look fresh, never better enforced than it is.
 
 - depends: freshness#DEC-5
 
 ### NOTE-2
-Selection only sees marker regions, so a change to code a claim relies on elsewhere reaches nothing; a sweep of every invariant covers the gap.
+Selection sees marker regions and the same-file definitions they use, so a change in a caller or another file reaches nothing; a sweep covers the gap.
+
+DEC-9 added the definitions.
 
 In the GameRelay trial, removing `'__proto__'` from `UNSAFE_KEYS`, defined about 500 lines above the marked check, selected no claim, while a check with Claude, asked directly, found the break. Marking the definition fixed that case; the sweep (`lore check --sweep`) is for the cases nobody marked.
 

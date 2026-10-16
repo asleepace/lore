@@ -1,7 +1,8 @@
 # lore (CLI)
 
 Small tools over a [Lore](../SPEC.md) graph, one step of the verification loop each. Text for
-people, `--json` for agents, `-` to read claims from stdin, so they compose. No runtime
+people, `--json` for agents, `-` to read claims from stdin, so they compose. `-C <dir>` works like
+`git -C`: relative paths (a cases file, `--message`) are read from that directory. No runtime
 dependencies. Design notes: [docs/cli.md](../docs/cli.md).
 
 ```sh
@@ -19,6 +20,10 @@ bun src/bin.ts -C .. lint             # or: bun run build && node dist/lore.js -
 | `gate [range] [--message pr.md] [--policy …]` | Are reached invariants updated, acknowledged or verified? | 1 if unmet under `block` |
 | `history <ref>` | Commits whose message or diff mentions a claim | 0 |
 | `record verified\|ack <ref>…` | The trailer line to add to a commit or PR | 0 |
+| `show <ref\|node>…` | One claim with its code and every edge, or a node with its claims, without reading the file | 0 |
+| `trace <ref\|node\|path>…\|- [--up\|--both] [--depth n]` | What rests on a claim, node or file, hop by hop, as a table | 0 |
+| `find [word…] [--kind] [--node] [--file] [--tier]` | Claims matching every filter, as records the other commands take | 0 |
+| `bench <cases.json> [--agent cmd] [--jobs n]` | Break claims on purpose in throwaway worktrees; score selection and checks | 1 on a false confirmation |
 | `link <ref> [--from file]` | The markdown link for a reference | 0 |
 | `graph` | The whole graph as JSON | 0 |
 | `mcp` | Serve these as MCP tools over stdio | runs until stdin closes |
@@ -39,6 +44,44 @@ lore check --sweep --agent "$AGENT"                        # every invariant, wh
 `--agent` is any command that reads a prompt on stdin and prints an answer starting with
 `VERDICT: holds`, `VERDICT: broken` or `VERDICT: unsure`. Without it, `check` prints the prompts.
 
+## Navigating
+
+The graph's edges are derived, never declared: `depends:`, references in a claim's text,
+`superseded_by`, and claims whose code is the same block (marker regions that touch).
+
+```sh
+lore show room#INV-2                 # the claim, where its code is, and every edge, in a few lines
+lore trace room#INV-2                # what rests on it (downstream): what a change to it can break
+lore trace room#INV-2 --up           # what it rests on
+lore trace src/room/Room.ts          # every claim anchored in a file, and what rests on them
+lore find --kind INV --tier asserted # invariants no code anchors
+lore find host --node room --json | lore check - --agent "$AGENT"
+```
+
+```
+| Hop | Claim | Relation | Statement |
+|---|---|---|---|
+| 0 | freshness#INV-1 | start | Detecting staleness never requires an LLM. |
+| 1 | cli#INV-3 | depends on freshness#INV-1 | `select`, `lint`, `digest` and `gate` never call a model … |
+| 1 | freshness#DEC-7 | same code as freshness#INV-1: cli/src/select.ts:81 | A claim may list what it `depends:` on … |
+| 2 | cli#NOTE-4 | mentions cli#INV-3 | The first real checks agreed with the code every time … |
+```
+
+## Measuring: bench
+
+A cases file lists edits that break a claim, or leave it intact, with the expected answer:
+
+```json
+{ "hide": ["lore/_inbox.md"],
+  "cases": [{ "id": "replay", "ref": "protocol#INV-3", "expect": "broken",
+              "edits": [{ "file": "apps/server/src/server.ts", "find": "signed.seq <= ws", "replace": "signed.seq < ws" }] }] }
+```
+
+`lore bench cases.json --agent "$AGENT"` applies each case in its own worktree, records whether
+selection reached the claim and what the check said, and reports false confirmations ("holds" on
+a broken claim), false alarms and unsure answers. The cases file and `hide` paths are deleted from
+each worktree first, so the agent can't read the answers. Without an agent it scores selection only.
+
 ## For agents: MCP
 
 ```json
@@ -46,7 +89,7 @@ lore check --sweep --agent "$AGENT"                        # every invariant, wh
 ```
 
 Tools: `lore_digest`, `lore_select`, `lore_check_context` (prompts for the agent to answer itself),
-`lore_ask`, `lore_gate`, `lore_record`, `lore_history`, `lore_lint`.
+`lore_show`, `lore_trace`, `lore_find`, `lore_ask`, `lore_gate`, `lore_record`, `lore_history`, `lore_lint`.
 
 ## In CI: the GitHub Action
 

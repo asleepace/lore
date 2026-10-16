@@ -34,6 +34,21 @@ describe('select', () => {
     expect(picked[1]!.reasons).toEqual(['depends on room#INV-1']);
   });
 
+  test('a changed same-file definition the region uses selects the claim at the region\'s severity', () => {
+    // @lore freshness#DEC-9
+    const code = (owner: string) => `const OWNER_ROLE = '${owner}';\n\nexport function other() {\n  return 1;\n}\n\nexport function setState(from: string, host: string) {\n  // ${AT} room#INV-1\n  if (from !== host || OWNER_ROLE !== 'host') throw new Error('not_host');\n  return true;\n}\n`;
+    repo = makeRepo({ ...BASE, 'src/room/room.ts': code('host') });
+    repo.write('src/room/room.ts', code('guest'));
+    const picked = selectClaims(loadGraph(repo.dir), diffFor(repo.dir, 'HEAD'), { covers: false });
+    expect(picked.map((p) => [p.ref, p.severity, p.reasons![0]])).toEqual([
+      ['room#INV-1', 'high', 'changed OWNER_ROLE (src/room/room.ts:1), used by the marker at 8'],
+      ['host#INV-1', 'low', 'depends on room#INV-1'],
+    ]);
+    // A change to code the region doesn't use reaches nothing.
+    repo.write('src/room/room.ts', code('host').replace('return 1;', 'return 2;'));
+    expect(selectClaims(loadGraph(repo.dir), diffFor(repo.dir, 'HEAD'), { covers: false })).toEqual([]);
+  });
+
   test('covered files flag every claim of the node at low severity, and only when asked', () => {
     repo = makeRepo(BASE);
     loosen(repo);

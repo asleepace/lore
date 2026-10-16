@@ -22,8 +22,9 @@ A protocol for the knowledge code can't hold: why it is the way it is, what must
 ## Tools
 
 [`cli/`](cli/) is `lore`: small commands for each step of the loop (`lint`, `digest`, `select`, `ask`,
-`check`, `gate`, `record`, `history`), the same as MCP tools for agents (`lore mcp`), and a GitHub
-Action ([`action.yml`](action.yml)) for pull requests.
+`check`, `gate`, `record`, `history`), for navigating the graph without reading whole files
+(`show`, `trace`, `find`), and for measuring how far to trust the loop (`bench`); the same as MCP
+tools for agents (`lore mcp`), and a GitHub Action ([`action.yml`](action.yml)) for pull requests.
 
 ## Progressive enhancement
 

@@ -231,6 +231,7 @@ Given a diff, a claim is **affected** when:
 | A changed hunk intersects a marker region of the claim | by kind: `INV` high, `DEC` medium, `NOTE` low |
 | A marker for the claim was removed | high |
 | A `tests:` or `files:` path changed or was deleted | medium |
+| A definition elsewhere in the same file that a marker region uses changed (MAY, for languages the tool reads) | as for the region |
 | A claim in its `depends:` was affected at high severity | low (one hop only, so nothing floods) |
 | A file in its node's `covers` changed | low, for every claim in the node |
 

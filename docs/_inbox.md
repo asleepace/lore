@@ -2,6 +2,27 @@
 
 Unsorted findings waiting to be triaged into claims or spec changes. Not a node (see `SPEC.md` §9).
 
+## First benchmark (2026-10-16)
+
+`lore bench` on GameRelay (45 cases in its `lore/bench.json`: 27 breaks, 10 benign edits, 8 clean
+controls; results in cli#NOTE-5):
+
+- **Selection is the weak stage, not the check.** It reached 14 of 27 breaks, exactly the ones
+  inside a marked region; following same-file definitions (freshness#DEC-9) made it 17. The rest
+  are callers, other files and unanchored invariants.
+- **[freshness] The prompt matters more than the model.** The first prompt let a check trust a
+  test or a function's name; the current one shows definitions and asks for a line-by-line
+  judgment, and missed nothing in 53 checks of broken claims.
+- **[format] False alarms point at wording.** Every "broken" on an unedited claim was the check
+  reading the claim literally (a list of exposed members that isn't complete; "additive" with a
+  documented exception). **Proposal:** a lint hint for invariants that enumerate ("only X, Y and
+  Z"), which go stale as code grows.
+- **[layers] An agent with Read can open any path,** including the real checkout and its cases
+  file; no answer did, but `bench` can only hide files inside the worktree. **Proposal:** document
+  running the agent sandboxed to the worktree when the numbers matter.
+- **The benchmark is self-graded.** The same model wrote the breaks and judged them. A fairer run
+  has a person (or another model) write the cases.
+
 ## First real checks (2026-10-16)
 
 `lore check` with Claude (`claude -p --tools Read,Glob,Grep`):
