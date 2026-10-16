@@ -1,9 +1,10 @@
 ---
-spec: lore/0.1
+lore: 0.2
 scope: app
-summary: Lore is a markdown format, plus optional tooling, for an agent-maintained knowledge graph of a repo's rationale, invariants, edges and quirks.
+summary: "Lore is a versioned markdown protocol, plus optional tooling, for an agent-maintained knowledge graph of a repo's rationale, invariants, edges and quirks."
+nodes: [docs]
 covers: [SPEC.md, README.md]
-verified: 2026-10-15
+verified: 2026-10-16
 review_after: 90d
 ---
 
@@ -13,10 +14,16 @@ This repository defines Lore and documents itself with it. `SPEC.md` is the sour
 
 ## Map
 
-- [format](docs/format.md): how nodes, claims and IDs are written.
+- [format](docs/format.md): how nodes, claims and IDs are written, where nodes live, and what else a node may hold.
 - [markers](docs/markers.md): how code (or any file) points at claims.
 - [freshness](docs/freshness.md): trust tiers and staleness detection.
-- [layers](docs/layers.md): progressive enhancement, from plain markdown to agents.
+- [layers](docs/layers.md): progressive enhancement from plain markdown to agents, and how the protocol is versioned.
+
+## Trials
+
+- **GameRelay** (asleepace/gamerelay.io#225, 2026-10-16): 10 nodes, 68 claims, 26 markers on a
+  monorepo with existing narrative docs. Most of v0.2 came from it; its findings are in that repo's
+  `lore/_inbox.md` and in this repo's [inbox](docs/_inbox.md).
 
 ## Invariants
 

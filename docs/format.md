@@ -1,11 +1,11 @@
 ---
 scope: domain
-parent: app
-summary: Why nodes, claims and IDs are shaped the way they are.
+parent: lore
+summary: "Why nodes, claims and IDs are shaped the way they are, where nodes live, and what else a node may hold."
 covers: [SPEC.md]
 links:
   - { to: markers, rel: related, note: "markers use the same full reference form" }
-verified: 2026-10-15
+verified: 2026-10-16
 review_after: 90d
 ---
 
@@ -55,9 +55,9 @@ Rejected: titled headings with explicit `<a id="inv-1">` anchors, which are nois
 Rejected: `:`, which is easier to regex but breaks the ID-is-a-link model.
 
 ### DEC-5
-`docs/` stays flat; the zoom tree lives in `parent:`.
+Each node folder stays flat; the zoom tree lives in `parent:`.
 
-A graph forced into folders gets one hierarchy baked into paths, and moving a node changes its path.
+A graph forced into folders gets one hierarchy baked into paths, and moving a node changes its path. v0.2 allows several node folders (DEC-8), each still flat.
 Rejected: nested folders like `docs/security/moderation.md`.
 
 ### DEC-6
@@ -72,12 +72,32 @@ Claim section order is a recommendation, not a lint error.
 Writing naturally broke the fixed order in 3 of 4 nodes, and the order tells an agent nothing. A formatter can sort sections.
 Rejected: strict order as an error (v0).
 
+### DEC-8
+`LORE.md` at the repository root is the one entry point and root node; its `nodes:` list routes to the folders that hold the rest.
+
+Projects differ. In the GameRelay trial `docs/` already held a dozen narrative documents, so v0.1 needed a config file to put nodes elsewhere; a monorepo or a published package wants nodes next to its code. One fixed entry file means a reader or tool always knows where to start, and the routing says the rest in the same file a human reads first.
+Rejected: `APP.md` with `.lore/config.json` (v0.1), which split the graph's entry across two files and named it after one kind of project. Rejected: nested graphs per folder, which breaks one graph per repository ([lore#DEC-2](../LORE.md#dec-2)).
+
+### DEC-9
+A node may hold open sections of any name, anywhere, for what isn't a claim.
+
+Some things that matter don't fit six claim types: a glossary, a diagram, open questions, how to run something locally. Without a place for them they end up forced into claims, or in another file nobody links. Tools don't parse open sections, so they cost nothing to allow.
+Rejected: a fixed list of allowed free-form sections. Rejected: free-form text only before the claims (v0.1), which pushed notes that belong next to a claim away from it.
+
+### DEC-10
+Comments are signed blockquotes on a claim, or a `## Comments` section on a node, and lint ignores them.
+
+People want to leave a doubt or a "this bit us again" next to a claim without rewriting it. A blockquote renders as an aside, needs no tooling, and the signature says whose it is, so an agent can add its own but never edit someone else's.
+Rejected: comments as a seventh claim type with IDs, which makes every remark permanent and numbered. Rejected: HTML comments only, which hide them from the people they're for.
+
 ## Limits
 
 ### LIM-1
 Renaming a node breaks every reference to it.
 
 Node IDs are filenames (DEC-2), and there is no redirect mechanism yet.
+
+> **agent (Claude), 2026-10-16:** Renaming the root from `APP.md` to `LORE.md` in v0.2 hit this: the spec keeps `app` as an alias of `lore` (SPEC.md §2.2) so existing references keep working. The same alias idea could become the general rename mechanism.
 
 ## Quirks
 
@@ -87,6 +107,8 @@ Reference matching is case-insensitive.
 IDs are written uppercase for readability, but GitHub lowercases anchors.
 
 ### QRK-2
-The same reference needs a different link path in `APP.md` than in `docs/` nodes.
+The same reference needs a different link path depending on the file it's written in.
 
-From `APP.md`, `format#DEC-1` is `docs/format.md#dec-1`; from inside `docs/`, it is `format.md#dec-1`. Root-to-node links are the only ones that break the "ID minus extension" rule.
+From `LORE.md`, `format#DEC-1` is `docs/format.md#dec-1`; from inside `docs/`, it is `format.md#dec-1`; from a node to the root it is `../LORE.md#…`; across node folders it's a relative path between them. Only links within one folder follow the plain "ID minus extension" rule, so v0.2 says paths are relative to the file and a formatter may fix them.
+
+> **agent (Claude), 2026-10-16:** The GameRelay trial used all three forms within its first ten nodes; this quirk is the one authors hit first.

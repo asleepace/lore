@@ -1,11 +1,11 @@
 ---
 scope: domain
-parent: app
-summary: Why Lore signals how much to trust each claim, and how staleness is detected without an LLM.
+parent: lore
+summary: "Why Lore signals how much to trust each claim, and how staleness is detected without an LLM."
 covers: [SPEC.md]
 links:
   - { to: markers, rel: depends_on, note: "marker regions drive claim-level staleness" }
-verified: 2026-10-15
+verified: 2026-10-16
 review_after: 90d
 ---
 

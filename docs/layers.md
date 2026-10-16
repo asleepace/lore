@@ -1,11 +1,11 @@
 ---
 scope: domain
-parent: app
-summary: Why every capability above plain markdown is an opt-in layer, and the rules agents follow.
+parent: lore
+summary: "Why every capability above plain markdown is an opt-in layer, the rules agents follow, and how the protocol is versioned."
 covers: [SPEC.md, README.md]
 links:
   - { to: freshness, rel: depends_on, note: "L3/L4 run the staleness rules" }
-verified: 2026-10-15
+verified: 2026-10-16
 review_after: 90d
 ---
 
@@ -25,6 +25,11 @@ Tool state never lives in the docs.
 
 Indexes, hashes and caches go in `.lore/` or git notes. Frontmatter only holds fields a human can read and act on.
 
+### INV-3
+Tools ignore what they don't know: frontmatter fields, metadata keys, sections and `rel` values.
+
+This is what lets a project add its own fields and a minor protocol version add features without breaking older tools (DEC-3).
+
 ## Decisions
 
 ### DEC-1
@@ -38,6 +43,12 @@ The agent step runs only when the deterministic step finds affected claims.
 
 Most PRs touch nothing documented, so they cost $0 and finish fast.
 Rejected: running the agent on every PR.
+
+### DEC-3
+Lore is versioned as a protocol: `LORE.md` declares `lore: <major>.<minor>`, minors only add from 1.0, and majors ship migration notes.
+
+Repositories, CLIs, CI actions and agents all read the same files at different times and versions. A declared version lets each of them tell whether it understands a graph instead of guessing, and lets the format change without stranding old graphs.
+Rejected: `spec: lore/0.1` as a label with no compatibility rules (v0.1). Rejected: no version at all, which turns every format change into a silent break for someone.
 
 ## Quirks
 

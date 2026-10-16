@@ -1,11 +1,11 @@
 ---
 scope: domain
-parent: app
-summary: Why claims are anchored by marker comments in the files that uphold them.
+parent: lore
+summary: "Why claims are anchored by marker comments in the files that uphold them."
 covers: [SPEC.md]
 links:
   - { to: freshness, rel: related, note: "marker regions are the main staleness signal" }
-verified: 2026-10-15
+verified: 2026-10-16
 review_after: 90d
 ---
 
