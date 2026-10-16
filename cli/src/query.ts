@@ -10,9 +10,9 @@ import { globToRegExp, normalizeRef, PREFIXES, REF_RX, stripCode } from './util'
  * - `depends`: a claim's `depends:` names another (it rests on it).
  * - `mentions`: a claim's statement or rationale references another.
  * - `superseded_by`: a retired claim names its replacement.
- * - `same-code`: two claims whose upholding code is the same block: marker regions that overlap or
- *   nearly touch, or a `files:` anchor on the whole file. Undirected, and only followed one hop
- *   from where a trace starts.
+ * - `same-code`: two claims whose upholding code is the same block: marker regions in a
+ *   non-markdown file that overlap or nearly touch, or a `files:` anchor on the whole file.
+ *   Undirected, and only followed one hop from where a trace starts.
  */
 // @lore format#DEC-13
 export type Relation = 'depends' | 'mentions' | 'superseded_by' | 'same-code';
@@ -30,6 +30,7 @@ const LOCAL = new RegExp(`(?<![#\\w-])((?:${PREFIXES.join('|')})-\\d+)\\b`, 'g')
 const list = (v?: string) => (v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 /** Regions this close (at most one line between them, usually blank) are the same block of code. */
 const NEAR = 2;
+const PROSE = /\.(md|mdx|markdown)$/i;
 const STRENGTH: Record<Relation, number> = { depends: 0, superseded_by: 1, mentions: 2, 'same-code': 3 };
 
 /** Files a claim is anchored in: `upholds` markers, `files:` and `tests:`. */
@@ -67,7 +68,8 @@ export function edges(graph: Graph): Edge[] {
   const regions = new Map<string, { ref: string; from: number; to: number }[]>();
   for (const c of graph.claims.values()) {
     for (const a of anchorsOf(graph, c)) {
-      if (a.via === 'see' || a.via === 'tests') continue;
+      // Markers in prose sit one per line (a list of principles), so adjacency there isn't shared code.
+      if (a.via === 'see' || a.via === 'tests' || PROSE.test(a.file)) continue;
       const r = { ref: normalizeRef(c.ref), from: a.line ?? 1, to: a.endLine ?? Number.MAX_SAFE_INTEGER };
       (regions.get(a.file) ?? regions.set(a.file, []).get(a.file)!).push(r);
     }
@@ -99,7 +101,13 @@ export interface Start {
   why: Map<string, string>;
 }
 
-/** Resolve a ref, a node ID, or a file, directory or glob to the claims it names. */
+/** The node whose file is `path` (`docs/room.md`, `LORE.md`), if any. */
+function nodeAt(graph: Graph, path: string): string | undefined {
+  const p = path.replace(/^\.\//, '');
+  return [...graph.nodes.values()].find((n) => n.path === p)?.id;
+}
+
+/** Resolve a ref, a node ID or file, or a file, directory or glob to the claims it names. */
 export function resolveStart(graph: Graph, input: string, inactive = false): Start {
   const why = new Map<string, string>();
   const keep = (c: Claim | undefined) => !!c && (inactive || c.active);
@@ -107,8 +115,9 @@ export function resolveStart(graph: Graph, input: string, inactive = false): Sta
   if (r.includes('#')) {
     const c = graph.claims.get(r);
     if (c) why.set(r, 'start');
-  } else if (graph.nodes.has(r) && !input.includes('/') && !input.includes('.')) {
-    for (const c of graph.nodes.get(r)!.claims) if (keep(c)) why.set(normalizeRef(c.ref), `in node ${r}`);
+  } else if ((graph.nodes.has(r) && !input.includes('/') && !input.includes('.')) || nodeAt(graph, input)) {
+    const id = graph.nodes.has(r) && !input.includes('/') && !input.includes('.') ? r : nodeAt(graph, input)!;
+    for (const c of graph.nodes.get(id)!.claims) if (keep(c)) why.set(normalizeRef(c.ref), `in node ${id}`);
   } else {
     for (const c of graph.claims.values()) {
       if (!keep(c)) continue;

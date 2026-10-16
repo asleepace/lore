@@ -1,44 +1,55 @@
-# Lore Spec — v0.3 (draft)
+# Lore Spec — v0.4 (draft)
 
 > **L**inked **O**bservations, **R**ationale & **E**dges
 
 Lore is a protocol for the knowledge code can't hold: why it is the way it is, what must stay
-true, and what was tried and rejected. It is written as plain markdown in the repository, read
-mostly by agents, and kept honest by checks that run on every change. This document is the whole
-protocol; every tool is optional.
+true, and what was tried and rejected. It is plain markdown in the repository, read mostly by
+agents, and checked against the code on every change. This document is the whole protocol; every
+tool is optional.
 
 Key words **MUST**, **SHOULD** and **MAY** are used as in RFC 2119.
 
 ---
 
-## 1. Goals
+## 1. Purpose
 
-A Lore graph is a set of **claims**: short statements with stable IDs, each anchored to the code
-or tests that uphold it. The format is shaped so that these follow from it, without extra work by
-authors:
+Lore exists for three moments in an agent's work: <!-- @lore lore#DEC-6 -->
 
-| Goal | What it means | Where |
+| Use | The agent asks | Lore answers with |
 |---|---|---|
-| **Zoom** | The graph can be read at any depth, from one page to everything, because every layer starts with a summary of the next. | §7 |
-| **Action semantics** | A claim's kind tells an agent how to treat it: a guardrail, a prior or context. | §4 |
-| **Gates** | A change to code that upholds an invariant can't land silently. | §9 |
-| **History** | Anything that mentions a claim (a commit, a PR, an issue) joins its history; nothing is declared. | §6 |
-| **Self-evaluation** | Every claim is a question with a known answer, so the graph yields its own test of an agent's understanding. | §8 |
-| **Contract** | A package's public claims ship with it, and weakening one is a breaking change. | §2.2 |
-| **Blast radius** | Claims say what they depend on, so a change flags what rests on it. | §5.3 |
+| **Plan** | What constraints does the area I'm about to change have, and how does it fit the system? | The map, then the claims anchored in that area: invariants to keep, decisions with what they rejected, notes (§7) |
+| **Review** | What could this change break, and does it? | The claims the change reaches and what rests on them, each checked against the new code (§8) |
+| **Context** | What here isn't visible in the code? | Only that: cheap to query, cheap to traverse, and never a restatement of the code (§7, §10) |
 
-Together they form the **verification loop** (§8): a change selects the claims it might break,
-each claim is checked against the new code, and only mismatches reach a human. Documentation that
-tests itself is the point of Lore; the rest is how it gets there.
+### 1.1 Intentions, ranked
 
-### 1.1 Principles
+When two pull against each other, the higher one wins.
 
-1. **Document what code can't say.** Rationale, invariants, decisions and known behavior. Never what is derivable from code. <!-- @lore see lore#DEC-1 -->
-2. **Identity is not position.** IDs never encode where something sits. Structure can change freely. <!-- @lore format#INV-1 -->
+1. **Stay true.** Every claim is checked against the code, and a stale claim surfaces instead of rotting. A wrong claim is worse than none: an agent acts on it with confidence.
+2. **Protect what must not break.** A change, by a person or an agent, can't quietly violate an invariant.
+3. **Capture what code can't say.** Why, what was decided, and what was rejected, so nobody re-litigates it. Tests guard behavior; they can't hold intent.
+4. **The right context at the right cost.** An agent gets the constraints around what it's touching, at the depth it chooses, without reading everything.
+
+All four are bounded by one constraint: **Lore must cost almost nothing to keep.** A feature that
+needs authors to do more than write claims and markers will not be used, so it doesn't belong in
+the core.
+
+For example: truth outranks cost, so a digest may drop detail but never shows a claim as verified
+when it isn't; protection outranks cost, so a review checks every invariant when that's affordable,
+though selection is cheaper (§8).
+
+### 1.2 Principles
+
+1. **Document what code can't say.** Rationale, invariants, decisions and known behavior; never what is derivable from code. <!-- @lore see lore#DEC-1 -->
+2. **Identity is not position.** IDs never encode where something sits, so structure can change freely. <!-- @lore format#INV-1 -->
 3. **IDs are links.** Every reference resolves to a plain markdown link with no tooling. <!-- @lore format#INV-3 -->
 4. **Progressive enhancement.** Deleting all tooling leaves the docs valid and useful. <!-- @lore lore#INV-1, layers#INV-1 -->
-5. **No tool state in docs.** Frontmatter holds only what a person writes and reads. Indexes and caches live in `.lore/`; evidence lives in git (§8). <!-- @lore layers#INV-2 -->
+5. **Evidence lives in git.** Frontmatter holds only what a person writes and reads; caches live in `.lore/`. Verifications and acknowledgments are commit trailers, and stable IDs make a claim's history a `git log` away. <!-- @lore layers#INV-2 -->
 6. **Small and closed at the core, open at the edges.** Few concepts, fixed; anything else goes in open sections, and tools ignore what they don't know. <!-- @lore layers#INV-3 -->
+7. **Derive, don't declare.** Tools derive edges, staleness and history from what authors already write. Anything else an author must keep in step with the code goes stale, so declared links are optional hints, never required. <!-- @lore see lore#DEC-9 -->
+
+Lore is not a call graph (a language server's job), not a test suite (it points at tests), and not
+a wiki of what the code does.
 
 ## 2. Entry point and layout
 
@@ -48,9 +59,8 @@ they nest.
 
 ```markdown
 ---
-lore: 0.3
-nodes: [docs, packages/sdk/lore]
-public: [packages/sdk/lore]
+lore: 0.4
+nodes: [docs]
 gate: warn
 ---
 
@@ -63,13 +73,12 @@ Multiplayer for single-file browser games: a relay that owns membership and an S
 - [protocol](docs/protocol.md)
 - [room](docs/room.md)
   - [host-health](docs/host-health.md)
-- [sdk](packages/sdk/lore/sdk.md)
-  - [entities](packages/sdk/lore/entities.md)
+- [sdk](docs/sdk.md)
+  - [entities](docs/entities.md)
 ```
 
 - A repository has exactly one graph and one `LORE.md`, at its root.
 - **`nodes`**: the node folders, relative to the root. Default `[docs]`. Each folder is flat (subfolders are ignored), holds only nodes and `_`-prefixed files, and node IDs are unique across all folders. <!-- @lore format#DEC-8 -->
-- **`public`**: node folders that are part of a published contract (§2.2). Default none.
 - **`gate`**: `off` | `warn` (default) | `block`, the policy for invariant gates (§9).
 
 ### 2.1 The map is the tree
@@ -78,19 +87,7 @@ The `## Map` section of `LORE.md` is a nested list of links to nodes. Nesting is
 a node listed under another is its child. Each node SHOULD appear in the map exactly once; a node
 not in the map is a child of `lore` (`L021`). <!-- @lore format#DEC-13 -->
 
-The map is the only place hierarchy is declared. Everything else in the graph (which node relates
-to which) is derived from references (§6).
-
-### 2.2 Public folders
-
-A node folder listed in `public` holds claims that are part of a package's contract with its users,
-and ships with the package. <!-- @lore lore#DEC-3 -->
-
-- A claim in a public folder MUST NOT reference a node outside the public folders (`L022`), so the
-  folder can be read on its own.
-- Retiring or superseding an `INV` in a public folder, or rewriting its first paragraph, is a
-  **breaking change**. L3 tools SHOULD say so on the PR.
-- Tools MAY generate agent-facing docs (an `llms.txt`, say) from public folders at a chosen depth (§7).
+The map is the only place hierarchy is declared. Every other edge is derived (§6).
 
 ## 3. Nodes
 
@@ -133,7 +130,7 @@ Anything that matters but isn't a claim goes in an open section.
 ```
 
 - A node is a `.md` file in a node folder; its ID is its filename without `.md` (`[a-z][a-z0-9-]*`). `lore` is reserved for `LORE.md`.
-- **Frontmatter** is optional and holds two fields: `covers` (globs of the files the node is about; drives node-level staleness, §5) and `verified` (the date a person or agent last confirmed the whole node). The node's verification commit is the commit that last changed its `verified:` line, found with `git blame`, never stored. <!-- @lore freshness#DEC-3 --> `LORE.md` adds `lore`, `nodes`, `public` and `gate`. Frontmatter is the YAML subset of §3.1; projects MAY add fields, and tools MUST ignore fields they don't know.
+- **Frontmatter** is optional and holds two fields: `covers` (globs of the files the node is about; drives node-level staleness, §5) and `verified` (the date a person or agent last confirmed the whole node). The node's verification commit is the commit that last changed its `verified:` line, found with `git blame`, never stored. <!-- @lore freshness#DEC-3 --> `LORE.md` adds `lore`, `nodes` and `gate`. Frontmatter is the YAML subset of §3.1; projects MAY add fields, and tools MUST ignore fields they don't know.
 - **Body**, in order:
   1. One `# Title`.
   2. **The lead**: the first paragraph after the title. One sentence: what this node is about. Required (`L004`). <!-- @lore format#DEC-11 -->
@@ -145,8 +142,9 @@ Anything that matters but isn't a claim goes in an open section.
 ### 3.1 Frontmatter subset
 
 One `key: value` per line; scalars are identifiers, numbers, dates (`2026-10-16`), durations
-(`90d`) and globs, unquoted, or any text in double quotes; lists are flow lists (`[a, b]`). Invalid
-YAML is `L015`; valid YAML outside the subset is `L019`.
+(`90d`) and globs, unquoted, or any text in double quotes; lists are flow lists (`[a, b]`).
+Versions are strings: `lore: 0.10` is not `0.1`. Invalid YAML is `L015`; valid YAML outside the
+subset is `L019`.
 
 ## 4. Claims
 
@@ -155,7 +153,7 @@ is the claim**: one sentence, at most 30 words (`L011`). Everything after it is 
 
 ### 4.1 Kinds
 
-There are three kinds. A claim's kind is its contract with the reader, especially an agent:
+A claim's kind is its contract with the reader, especially an agent:
 
 | Prefix | Section | Kind | An agent… |
 |---|---|---|---|
@@ -167,6 +165,7 @@ There are three kinds. A claim's kind is its contract with the reader, especiall
 
 - A `DEC` SHOULD have a line starting with `Rejected:` naming what was considered and why it lost (`L013`). <!-- @lore format#DEC-6 -->
 - Plans are not claims. They belong in an issue tracker or plan document, linked from an open section.
+- An invariant SHOULD state the guarantee, not enumerate the code: "no connection secret is reachable from a `relay`" outlives "a `relay` exposes only `playerId`, `room` and `party`", which breaks the first time a harmless getter is added.
 
 ### 4.2 IDs and references
 
@@ -183,8 +182,8 @@ A claim MAY end with a list of `- key: value` items:
 |---|---|
 | `tests` | Tests that enforce the claim (comma-separated paths). |
 | `files` | Files that uphold the claim but can't carry a marker (JSON, lockfiles, config). |
-| `depends` | Claims this one rests on (comma-separated full references). Drives blast radius (§5.3). |
-| `ask` | The question for self-evaluation (§8), when the first paragraph doesn't make an obvious one. |
+| `depends` | Claims this one rests on (comma-separated full references). An optional hint (§1.2, principle 7). |
+| `ask` | The question a check asks (§8), when the first paragraph doesn't make an obvious one. |
 | `status` | `active` (default) \| `superseded` \| `retired` |
 | `superseded_by` | The replacing claim. Implies `superseded`. |
 | `review_after` | A date or duration after which the claim should be rechecked even if nothing changed. |
@@ -209,6 +208,7 @@ if (from !== this.hostId) return this.error(conn, 'not_host', 'Only the host can
 - References in markers MUST be full (`L006`). <!-- @lore markers#INV-1 -->
 - A marker sits on the line above the code it anchors, or at the end of its first line. Its region runs to the next blank line or marker, at most 50 lines.
 - In markdown, a marker MUST be inside an HTML comment, and markers inside fenced or inline code are ignored. <!-- @lore markers#DEC-3 -->
+- Mark the definition a check relies on (the constant, the helper) as well as the check, when they are far apart.
 
 ### 5.2 Trust tiers
 
@@ -220,7 +220,8 @@ Only invariants have a trust tier, because only they can be enforced: <!-- @lore
 | **anchored** | A marker, or a `files:` entry. |
 | **asserted** | Prose only. |
 
-<!-- @lore freshness#DEC-6 -->
+A check never raises a tier: an agent can confirm a false claim, so only tests make a claim
+"tested". <!-- @lore freshness#DEC-6, freshness#NOTE-1 -->
 
 ### 5.3 Staleness
 
@@ -230,27 +231,43 @@ Given a diff, a claim is **affected** when:
 |---|---|
 | A changed hunk intersects a marker region of the claim | by kind: `INV` high, `DEC` medium, `NOTE` low |
 | A marker for the claim was removed | high |
-| A `tests:` or `files:` path changed or was deleted | medium |
 | A definition elsewhere in the same file that a marker region uses changed (MAY, for languages the tool reads) | as for the region |
+| A `tests:` or `files:` path changed or was deleted | medium |
 | A claim in its `depends:` was affected at high severity | low (one hop only, so nothing floods) |
 | A file in its node's `covers` changed | low, for every claim in the node |
 
-<!-- @lore freshness#DEC-7 -->
+<!-- @lore freshness#DEC-7, freshness#DEC-9 -->
 
-Detection MUST be deterministic and MUST NOT need an LLM. <!-- @lore freshness#INV-1 -->
+Detection MUST be deterministic and MUST NOT need a model. <!-- @lore freshness#INV-1 -->
 `covers` SHOULD name the files a node is about, not files every change touches.
+
+A change in a caller or another file reaches nothing (freshness#NOTE-2); see scope in §8.
 
 ## 6. The graph
 
 - **The tree** is the map (§2.1).
-- **Every other edge is derived** from references: in prose, in markers, in `depends:`, and in any text a tool can read alongside the repository: commit messages, PR descriptions, issues, review comments. A reference anywhere puts that text into the claim's **history**. Nothing is declared twice. <!-- @lore format#DEC-13 -->
+- **Every other edge is derived** (principle 7): <!-- @lore format#DEC-13 -->
+
+| Edge | From |
+|---|---|
+| depends on | a claim's `depends:` |
+| mentions | a reference in a claim's statement or rationale |
+| superseded by | `superseded_by` |
+| same code | two claims whose marker regions in a non-markdown file overlap or sit at most one line apart, or share a `files:` entry; followed one hop only |
+
+- **History** is derived from git: every commit whose message or diff mentions a claim's ID. Tools MAY add PR descriptions, issues and review comments. Nothing is declared twice. <!-- @lore see lore#DEC-7 -->
 - Commits MAY carry trailers: `Lore-Claim: ref` (adds or changes a claim), `Lore-Ack: ref` (§9), `Lore-Verified: ref` (§8).
 
-## 7. Zoom and digests
+## 7. Reading
+
+The read path serves planning and context (§1): orient cheaply, then go exactly as deep as the
+change needs.
+
+### 7.1 Zoom and digests
 
 Every layer of a graph opens with a summary of the next: the `LORE.md` lead, the map, each node's
-lead, each claim's first paragraph, then its rationale. So the graph can be rendered at any depth
-by keeping first paragraphs:
+lead, each claim's first paragraph, then its rationale. So the graph renders at any depth by
+keeping first paragraphs:
 
 | Depth | Contains |
 |---|---|
@@ -260,26 +277,48 @@ by keeping first paragraphs:
 | 3 | Plus rationale, metadata and open sections: the full text |
 
 A **digest** is the graph rendered at a depth, optionally limited to a subtree or to the nodes
-covering a set of files. L2 tools MUST be able to produce one. Digests are how agents load a
-repository: depth 1 to orient, depth 2 for the area they're changing, depth 3 for the claims they
-might break. <!-- @lore layers#DEC-5 -->
+covering a set of files. <!-- @lore layers#DEC-5 -->
 
-## 8. The verification loop
+### 7.2 Navigation
 
-1. **Select.** For a diff, staleness detection (§5.3) lists the affected claims. Deterministic.
-2. **Ask.** Each affected claim becomes a question: its `ask:`, or one built from its first paragraph by a fixed template per kind. The question says where to look; it is deterministic, so two runs ask the same thing.
-3. **Check.** An agent reads the claim, its question and the code that upholds it, and gives a verdict: **holds**, **broken** or **unsure**. The verdict is always about the claim, never about the wording of the question.
+L2 tools MUST also answer three queries, so an agent follows edges instead of reading files:
+
+- **Show** a claim: its text, kind, tier, anchors (file and line) and every edge from §6. Or a node: its lead, children and claims.
+- **Trace** from claims, a node, or a path (a file, directory or glob starts from every claim anchored there): the claims connected to it, breadth-first, each once at its nearest hop, with how it was reached. **Down** (the default) is what rests on the start, so what changing it can break; **up** is what it rests on.
+- **Find** claims by words, kind, node (with the nodes under it), anchored path or tier.
+
+A planning agent reads the depth-1 digest (a few hundred words for a whole repository), traces the
+files or nodes it expects to touch, and shows the claims it needs in full. <!-- @lore cli#DEC-9 -->
+
+## 8. Review and the verification loop
+
+A **review** answers "what could this change break, and does it?" It runs the verification loop
+over a change:
+
+1. **Select.** Staleness detection (§5.3) lists the claims the change reaches, with severity. Deterministic.
+2. **Ask.** Each claim becomes a question: its `ask:`, or one built from its first paragraph by a fixed template per kind. Deterministic, so two runs ask the same thing.
+3. **Check.** An agent reads the claim, its question, the code that upholds it and the same-file definitions that code uses, and gives a verdict: **holds**, **broken** or **unsure**. The verdict is about the claim, never the wording of the question, and about what the code does, not what tests, comments or names say it should do. A missing or unclear verdict is **unsure**, never holds.
 4. **Record.**
-   - **Agreement:** the claim is **verified** at that commit, recorded as a `Lore-Verified: ref` trailer on the commit or a line in the PR. Git holds the evidence, not the docs. A claim's freshness is measured from its latest verification, or its node's `verified` date, whichever is later. <!-- @lore freshness#DEC-5 -->
-   - **Disagreement:** the gate fires (§9).
+   - **Agreement:** the claim is **verified** at that commit, recorded as a `Lore-Verified: ref` trailer or a line in the PR. A claim's freshness is measured from its latest verification, or its node's `verified` date, whichever is later. <!-- @lore freshness#DEC-5 -->
+   - **Disagreement:** the gate fires (§9), and the review shows the agent's reasons.
 
-Steps 1, 2 and 4 are deterministic (L3); only step 3 needs a model (L4), so a repository without one
-still gets selection, questions and gates. <!-- @lore layers#DEC-4 -->
+Steps 1, 2 and 4 are deterministic (L3); only step 3 needs a model (L4). <!-- @lore layers#DEC-4 -->
 
-- **A check never raises a tier.** It refreshes freshness only: an agent can confirm a false claim, so only tests make a claim "tested". <!-- @lore freshness#NOTE-1 -->
-- **Self-evaluation.** The same questions, asked without a diff, form a benchmark of how well an agent understands the repository at each depth. Its score at depth 1, 2 and 3 says how much context the repository needs, and is a health signal worth tracking over time.
-- **Sweep.** Selection only sees marker regions, so a change to code a claim relies on elsewhere (a constant defined far from the check that uses it) reaches nothing. An L4 tool SHOULD also check every active invariant on a schedule, whatever changed. Marking definitions as well as checks narrows the gap. <!-- @lore freshness#NOTE-2 -->
-- **Pressure.** A claim that is acknowledged or fails checks often marks a place where the code fights its own design. Tools SHOULD report the claims with the most acknowledgments.
+**Scope.** Selection saves cost; it isn't what makes a review correct. A review SHOULD check every
+active invariant when the graph has few enough to afford it (tens, not hundreds; on GameRelay, 21
+invariants check in about two minutes), and use selection to order them, most affected first.
+Above that, it checks what selection reaches, and a **sweep** checks every invariant on a
+schedule. <!-- @lore layers#DEC-7, freshness#NOTE-2 -->
+
+**Downstream.** A review lists what rests on each reached claim (trace down, §7.2). Lore names the
+guarantees at stake; following the code from there is the reviewer's job.
+
+**Decisions** MAY be checked too, with the question "does the code still do what this decided,
+rather than what it rejected?" A tool SHOULD measure that template (§10) before checking decisions
+by default. <!-- @lore see freshness#DEC-11 -->
+
+**Pressure.** A claim that is acknowledged or fails checks often marks a place where the code
+fights its own design. Tools SHOULD report the claims with the most acknowledgments.
 
 ## 9. Gates
 
@@ -296,7 +335,30 @@ claims are retired with `status`, never deleted, so their numbers are never reus
 Under `gate: warn`, an L3 tool reports unmet gates; under `block`, it fails the check; under `off`,
 it does neither. A bot's own commits never trigger a gate. <!-- @lore layers#DEC-6, layers#QRK-1 -->
 
-## 10. Lint
+## 10. Measuring trust
+
+How far to trust a graph's reviews is a number to measure per repository, not a property to
+assume. <!-- @lore freshness#DEC-10 -->
+
+A **benchmark** is a set of cases, each an exact edit that breaks a claim or leaves it intact,
+applied in a throwaway copy of the repository that the checking agent can't read the cases from.
+It reports:
+
+| Measure | Question | Where it points |
+|---|---|---|
+| **Selection recall** | Of the edits that break a claim, how many did selection reach? | Markers and §5.3 |
+| **Selection noise** | How many other claims did each edit reach? | §5.3 heuristics |
+| **False confirmations** | How often did a check say "holds" about a broken claim? | The check prompt; the one number that lets a break land |
+| **False alarms** | How often did it say "broken" about a claim that holds? | Usually the claim's wording (§4.1) |
+| **Inferability** | Which claims does an agent answer correctly from the code alone, without the graph? | Principle 1: those restate the code |
+
+The outcome test is a task run: give an agent the same feature task with and without the graph,
+and count the invariants it breaks.
+
+Cases written by the same model that checks them measure only breaks it can imagine; cases from a
+person or another model are the fairer test.
+
+## 11. Lint
 
 | Code | Level | Rule |
 |---|---|---|
@@ -316,79 +378,100 @@ it does neither. A bot's own commits never trigger a gate. <!-- @lore layers#DEC
 | `L018` | error | `lore` version missing, or a major version the tool doesn't support |
 | `L019` | warn | Frontmatter outside the subset (§3.1) |
 | `L021` | warn | Node missing from the map, or listed twice |
-| `L022` | error | A claim in a public folder references a non-public node |
+| `L022` | error | A claim in a public folder references a non-public node (§13.1) |
 | `L023` | warn | `depends:` points at a retired or superseded claim |
 
-Codes are never reused, like claim numbers. Retired in v0.3: `L005` (parent chain; the map replaces
-it), `L007` (plans), `L009` (unanchored node), `L014` (section order), `L020` (summary twice).
+Codes are never reused, like claim numbers. Retired in v0.3: `L005`, `L007`, `L009`, `L014`, `L020`.
 
 Tools MUST NOT report open sections, comments, unknown fields or unknown metadata keys.
 
-## 11. Conformance levels
+## 12. Conformance levels
 
 | Level | Adds | Requires |
 |---|---|---|
 | **L0** Format | §2–§4, §6 | Nothing |
 | **L1** Markers | §5.1 | Nothing (grep) |
-| **L2** CLI | Lint (§10), tiers and staleness (§5), digests (§7) | A `lore` binary |
-| **L3** CI | Selection and gates on every PR (§8.1, §9) | A CI action |
-| **L4** Agent | Checks and self-evaluation (§8), proposed claim updates | A model |
-| **L5** Push | A digest of the claims covering a file, injected when an agent opens it | An editor or agent hook |
+| **L2** CLI | Lint (§11), tiers and staleness (§5), reading (§7) | A `lore` binary |
+| **L3** CI | Selection and gates on every PR (§8, §9) | A CI action |
+| **L4** Agent | Checks and reviews (§8), benchmarks (§10) | A model |
 
 An agent at any level MUST only edit nodes affected by its change, MUST NOT delete claims or others'
 comments, and its changes go through normal review. Upgrading `lore:` is a human decision.
 <!-- @lore layers#DEC-1 -->
 
-## 12. Versioning
+## 13. Extensions
+
+Features that serve a real need but that no trial has exercised yet. Tools MAY implement them; they
+may change in any minor version until a trial uses them. <!-- @lore lore#DEC-8 -->
+
+### 13.1 Public folders
+
+`LORE.md` MAY list **`public`** node folders: claims that are part of a package's contract with its
+users, shipped with the package. <!-- @lore lore#DEC-3 -->
+
+- A claim in a public folder MUST NOT reference a node outside the public folders (`L022`), so the folder can be read on its own.
+- Retiring or superseding an `INV` in a public folder, or rewriting its first paragraph, is a breaking change. L3 tools SHOULD say so on the PR.
+- Tools MAY generate agent-facing docs (an `llms.txt`, say) from public folders at a chosen depth (§7.1).
+
+### 13.2 Push
+
+An editor or agent hook MAY inject the digest of the claims covering a file when an agent opens it.
+
+## 14. Versioning
 
 - `LORE.md` declares `lore: <major>.<minor>` (`L018`). Each version is tagged in this repository as `v<major>.<minor>`.
 - **From 1.0**, a minor version only adds; a major version may change anything and ships migration notes. **Before 1.0**, any minor may break, with migration notes. <!-- @lore layers#DEC-3 -->
 - Tools ignore what they don't know (fields, keys, sections, claim prefixes), and MUST read every minor version of the majors they support.
 
-### 12.1 Reading earlier graphs
+### 14.1 Reading earlier graphs
 
-Tools MUST read v0.1 and v0.2 graphs:
+Tools MUST read v0.1 to v0.3 graphs:
 
 - **Root:** `APP.md` when there's no `LORE.md`; `app` is an alias of `lore`; `.lore/config.json`'s `dir` acts as `nodes`.
-- **Frontmatter:** `summary`, when present, is the node's lead, and the first paragraph is read as context (in v0.1 graphs the first paragraph was often a pointer to longer docs, not a summary); `parent` places a node in the tree when the map doesn't list it; `scope`, `links` and `status` are ignored.
-- **Claim types:** `LIM`, `QRK` and `EDGE`, under `## Limits`, `## Quirks` and `## Edges`, are read as `NOTE` kind and keep their IDs; `PLAN` under `## Plans` is read as `NOTE` too. New claims use `NOTE`. Renumbering would break references, so migration never does it.
+- **Frontmatter:** `summary`, when present, is the node's lead, and the first paragraph is read as context (in v0.1 graphs it was often a pointer to longer docs); `parent` places a node in the tree when the map doesn't list it; `scope`, `links` and `status` are ignored.
+- **Claim types:** `LIM`, `QRK` and `EDGE`, under `## Limits`, `## Quirks` and `## Edges`, and `PLAN` under `## Plans`, are read as `NOTE` kind and keep their IDs. New claims use `NOTE`. Renumbering would break references, so migration never does it.
 - **Markers:** `enforces` and `implements` are read as plain `@lore`.
 
-### 12.2 Migrating to v0.3
+### 14.2 Migrating
 
-Set `lore: 0.3`; add a `## Map` with every node nested where its `parent` said; delete `scope`,
-`parent`, `links`, `status` and `summary` (moving any summary into the lead); drop the verbs from
-markers. Keep every claim ID. A formatter MAY do all of it.
+- **v0.3 → v0.4:** set `lore: 0.4`. Nothing else changes in the format; `public` is now an extension (§13.1) and reads the same.
+- **v0.2 → v0.3:** add a `## Map` with every node nested where its `parent` said; delete `scope`, `parent`, `links`, `status` and `summary` (moving any summary into the lead); drop the verbs from markers. Keep every claim ID. A formatter MAY do all of it.
 
-## 13. Open questions
+## 15. Open questions
 
-- **False confirmation.** How often does an agent check agree with a claim that's no longer true? The loop's value depends on it; measure before trusting it.
-- **Goodhart.** Will authors write claims that are easy to verify rather than important? Watch claim quality in review.
-- **Comments' end state.** Should a comment older than a set age be flagged until it becomes a claim or is deleted?
-- **Cross-repo references.** Public folders make a package's claims readable elsewhere; should another repository be able to reference them?
-- **Extensions.** Should `LORE.md` be able to declare more claim kinds (a `RISK`, an `SLO`), as long as each says which existing kind it behaves as? Not until two trials ask for the same one.
-- Marker regions: is 50 lines enough before tree-sitter adapters?
+- **Independent cases.** Checks gave no false confirmations in 53 checks of broken claims on GameRelay (§10), but the same model wrote the breaks. How do checks do on cases a person writes?
+- **Decision checks.** Does the decision template (§8) find real drift, or only noise?
+- **Inferability in practice.** How many claims in a real graph restate the code, and should lint flag them?
+- **Goodhart.** Will authors write claims that are easy to verify rather than important? Inferability is one guard.
+- **Ignored paths.** Test fixtures and generated code hold example markers. A root `ignore:` list, or nothing until a second repository needs it?
+- **Cross-repo references.** Should another repository be able to reference a public folder's claims?
+- **Extensions.** Should `LORE.md` declare more claim kinds (a `RISK`, an `SLO`), each saying which existing kind it behaves as? Not until two trials ask for the same one.
+- **Marker regions.** Is 50 lines enough before tree-sitter adapters?
 
-## 14. Changelog
+## 16. Changelog
 
-### v0.3 (2026-10-16, draft)
+### v0.4 (2026-10-16, draft)
 
-From the GameRelay trial's review of v0.2, two variations compared (a minimal closed format, and a
-core with profiles), and the properties they unlock. v0.3 takes the minimal one, plus the two
-pieces of the other the goals need (`depends`, public folders), and leaves extensions open (§13).
+From a benchmark of the loop on GameRelay (asleepace/gamerelay.io#225) and a review of v0.3
+against what the trials used. No format change; the spec is reorganized around what Lore is for.
 
-- **Goals** (§1) and **the verification loop** (§8): select, ask, check, record. Agent checks refresh freshness, never tiers.
-- **Three claim kinds**: `INV` (guardrail), `DEC` (prior), `NOTE` (context), with what an agent does with each. `LIM`, `QRK`, `EDGE` and `PLAN` are read as `NOTE`; plans move out of claims.
-- **The map is the tree** (§2.1). `parent`, `scope`, `links` and node `status` are gone; the graph is derived from references, including commits and PRs (§6).
-- **Frontmatter is `covers` and `verified`** (plus `lore`, `nodes`, `public`, `gate` on the root).
-- **Markers**: `@lore <ref>` and `@lore see <ref>`; severity comes from the claim's kind, not the verb.
-- **Only invariants have a trust tier**; `files:` anchors claims in files that can't hold a comment.
-- **`depends:`** between claims, with one-hop staleness (§5.3).
-- **Digests** at depths 0–3 (§7), required at L2.
-- **Gates** (§9) with `Lore-Ack:` and a `gate:` policy.
-- **Public folders** (§2.2): self-contained, breaking-change aware.
-- **`Lore-Verified:` trailers** give claim-level verification without tool state in the docs.
-- Lint: added `L021`–`L023`; retired `L005`, `L007`, `L009`, `L014`, `L020`; codes never reused.
+- **Purpose** (§1): three uses (plan, review, context) and four ranked intentions, bounded by "costs almost nothing to keep". They replace v0.3's seven goals: zoom, action semantics, gates, blast radius and self-evaluation serve the uses; **history** follows from git (principle 5); **contract** is an extension.
+- **Principle 7, derive, don't declare.** On GameRelay, nothing declared a `depends:` and 43 of 68 claims had no edge; everything that worked was derived from code. `depends:` stays, as an optional hint.
+- **Reading** (§7.2): show, trace and find, required at L2.
+- **Reviews** (§8) check every invariant when that's affordable, with selection ordering them: selection reached 17 of 27 deliberate breaks, checks of every invariant caught 27. Checks see same-file definitions and judge the code over tests and names, which took false confirmations from 3 in 47 to 0 in 53. Decision checks MAY, once measured.
+- **Same-file definitions** a marker region uses reach its claim (§5.3, MAY).
+- **Same-code edges** count only non-markdown regions: adjacent markers in a spec's prose are not shared code.
+- **Measuring trust** (§10): recall, noise, false confirmations, false alarms, inferability, and a task run.
+- **Extensions** (§13): public folders and push, until a trial uses them. L5 is gone from conformance.
+- Invariants SHOULD state guarantees, not enumerate code (§4.1). Versions are strings (§3.1).
+
+### v0.3 (2026-10-16)
+
+Three claim kinds (`INV`, `DEC`, `NOTE`) with what an agent does with each; the map as the tree;
+frontmatter as `covers` and `verified`; markers without verbs; tiers for invariants only; `files:`
+and `depends:`; digests at depths 0–3; the verification loop and gates with `Lore-Ack:` and
+`Lore-Verified:` trailers; public folders; lint `L021`–`L023`, retiring `L005`, `L007`, `L009`,
+`L014` and `L020`.
 
 ### v0.2 (2026-10-16)
 

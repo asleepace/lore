@@ -117,7 +117,8 @@ export function selectClaims(graph: Graph, diff: Diff, opts: { covers?: boolean 
     const abs = join(graph.root, mk.file);
     if (!fileLines.has(mk.file)) fileLines.set(mk.file, existsSync(abs) ? readFileSync(abs, 'utf8').split('\n') : []);
     const c = graph.claims.get(mk.ref);
-    if (!c) continue;
+    // A change inside the region already reached the claim, with the better reason.
+    if (!c || [...changed].some((l) => l >= mk.line && l <= mk.endLine)) continue;
     for (const d of definitionsUsed(fileLines.get(mk.file)!, mk.line, mk.endLine)) {
       const n = [...changed].find((l) => l >= d.start && l <= d.end);
       if (n !== undefined) hit(mk.ref, BY_KIND[c.kind], `changed ${d.name} (${mk.file}:${n}), used by the marker at ${mk.line}`);

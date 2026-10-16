@@ -113,6 +113,15 @@ describe('trace', () => {
     expect(trace(g, ['src/**/*.ts']).rows.length).toBe(trace(g, ['src/room/room.ts']).rows.length);
   });
 
+  test("markers on adjacent lines of markdown aren't shared code; a node's file starts from the node", () => {
+    repo = linked();
+    repo.write('NOTES.md', `- one <!-- ${AT} room#INV-1 -->\n- two <!-- ${AT} host#NOTE-1 -->\n`);
+    repo.git('add', '-A');
+    const g = loadGraph(repo.dir);
+    expect(edges(g).filter((e) => e.rel === 'same-code' && e.file!.startsWith('NOTES.md'))).toEqual([]);
+    expect(trace(g, ['docs/host.md']).rows.map((r) => r.ref)).toEqual(trace(g, ['host']).rows.map((r) => r.ref));
+  });
+
   test('cycles end: two claims that mention each other are each listed once', () => {
     repo = linked();
     repo.write('docs/room.md', BASE['docs/room.md']!.replace('Anyone else gets an error.', 'Anyone else gets an error; see DEC-1.').replace('Rejected: restoring the old host.', 'Follows from INV-1.\nRejected: restoring the old host.'));

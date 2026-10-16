@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -111,29 +111,22 @@ export interface CheckOptions {
   timeoutMs?: number;
 }
 
-/**
- * Check claims: build each prompt, and with an agent command, hand it over and read the verdict.
- * Without one, the prompts are returned for the caller (often an agent itself) to answer.
- */
-export function check(graph: Graph, records: { ref: string }[], opts: CheckOptions = {}): CheckRecord[] {
+/** Each claim's prompt and question, without asking anyone: what a caller (often an agent itself) answers. */
+export function prepare(graph: Graph, records: { ref: string }[]): CheckRecord[] {
   return records.flatMap((r) => {
     const c = graph.claims.get(normalizeRef(r.ref));
     if (!c) return [];
-    const prompt = promptFor(graph, c);
-    const base: CheckRecord = { ...(r as ClaimRecord), ref: c.ref, kind: c.kind, statement: c.statement, question: questionFor(c), prompt };
-    if (!opts.agent) return [base];
-    const run = spawnSync(opts.agent, { shell: true, input: prompt, encoding: 'utf8', cwd: graph.root, timeout: opts.timeoutMs ?? 180_000, maxBuffer: 8 * 1024 * 1024 });
-    const answer = (run.stdout ?? '').trim() || (run.error ? `agent failed: ${run.error.message}` : (run.stderr ?? '').trim());
-    return [{ ...base, answer, verdict: run.status === 0 ? parseVerdict(answer) : 'unsure', ...(run.status === 0 ? {} : { failed: true }) }];
+    return [{ ...(r as ClaimRecord), ref: c.ref, kind: c.kind, statement: c.statement, question: questionFor(c), prompt: promptFor(graph, c) }];
   });
 }
 
-/** One check without blocking, for running many at once (`lore bench`). Same prompt, same verdict rule. */
-export function checkAsync(graph: Graph, ref: string, opts: CheckOptions & { agent: string }): Promise<CheckRecord | null> {
-  const c = graph.claims.get(normalizeRef(ref));
-  if (!c) return Promise.resolve(null);
-  const prompt = promptFor(graph, c);
-  const base: CheckRecord = { ref: c.ref, kind: c.kind, statement: c.statement, question: questionFor(c), prompt };
+/**
+ * Hand one prompt to the agent command and read its verdict: the only place an agent runs, so
+ * `check`, `review` and `bench` judge the same way. A non-zero exit or a timeout is `unsure` and
+ * `failed`, never `holds`.
+ */
+// @lore cli#DEC-6
+export function runAgent(root: string, prompt: string, opts: CheckOptions & { agent: string }): Promise<{ answer: string; verdict: Verdict; failed?: true }> {
   // The prompt goes in through a file, not a pipe: a pipe needs this process's event loop to feed
   // it, and a caller doing other work can leave an agent waiting for input it gives up on.
   const dir = mkdtempSync(join(tmpdir(), 'lore-prompt-'));
@@ -141,7 +134,7 @@ export function checkAsync(graph: Graph, ref: string, opts: CheckOptions & { age
   writeFileSync(file, prompt);
   const fd = openSync(file, 'r');
   return new Promise((done) => {
-    const child = spawn(opts.agent, { shell: true, cwd: graph.root, stdio: [fd, 'pipe', 'pipe'] });
+    const child = spawn(opts.agent, { shell: true, cwd: root, stdio: [fd, 'pipe', 'pipe'] });
     closeSync(fd);
     let out = '';
     let err = '';
@@ -153,7 +146,28 @@ export function checkAsync(graph: Graph, ref: string, opts: CheckOptions & { age
       clearTimeout(timer);
       rmSync(dir, { recursive: true, force: true });
       const answer = out.trim() || err.trim() || `agent exited ${code}`;
-      done({ ...base, answer, verdict: code === 0 ? parseVerdict(answer) : 'unsure', ...(code === 0 ? {} : { failed: true }) });
+      done(code === 0 ? { answer, verdict: parseVerdict(answer) } : { answer, verdict: 'unsure', failed: true });
     });
   });
+}
+
+/** Check claims with an agent, `jobs` at a time (default 4), results in input order. */
+export async function checkAll(
+  graph: Graph,
+  records: { ref: string }[],
+  opts: CheckOptions & { agent: string; jobs?: number; onResult?: (r: CheckRecord) => void },
+): Promise<CheckRecord[]> {
+  const todo = prepare(graph, records);
+  const out: CheckRecord[] = new Array(todo.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length) {
+      const i = next++;
+      const r = todo[i]!;
+      out[i] = { ...r, ...(await runAgent(graph.root, r.prompt, opts)) };
+      opts.onResult?.(out[i]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, opts.jobs ?? 4) }, worker));
+  return out;
 }

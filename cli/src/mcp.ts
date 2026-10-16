@@ -1,11 +1,12 @@
 import { createInterface } from 'node:readline';
 import { ask } from './ask';
-import { check, sweepTargets } from './check';
+import { prepare, sweepTargets } from './check';
 import { digest } from './digest';
 import { checkGates } from './gate';
 import { loadGraph } from './graph';
 import { history } from './history';
 import { find, show, showNode, trace } from './query';
+import { reviewContext } from './review';
 import { diffFor, selectClaims } from './select';
 import { tierOf } from './tiers';
 import { normalizeRef } from './util';
@@ -46,6 +47,24 @@ export const TOOLS: Tool[] = [
     run: (root, i) => digest(loadGraph(root), { depth: Number(i.depth ?? 1), node: i.node as string | undefined, files: i.files as string[] | undefined }),
   },
   {
+    name: 'lore_review',
+    title: 'Review a change',
+    description:
+      'What a change could break: the claims it reaches (with severity and why), what rests on each, and the prompt for checking each reached invariant. alsoCheck lists the other invariants to check when the graph is small, because selection misses callers and other files; get their prompts with lore_check_context. Answer each prompt from the code ("VERDICT: holds|broken|unsure"), then call lore_record for those that hold. Decisions and notes are context, not checked.',
+    inputSchema: { type: 'object', properties: { range, max: { type: 'integer', default: 50, description: 'Check every invariant up to this many.' } } },
+    annotations: readOnly,
+    run: (root, i) => {
+      const r = reviewContext(loadGraph(root), { range: (i.range as string | undefined) ?? 'HEAD', max: Number(i.max ?? 50) });
+      const reached = r.items.filter((x) => x.severity);
+      return {
+        range: r.range,
+        scope: r.scope,
+        reached: reached.map(({ ref, kind, statement, severity, reasons, downstream, checked, question, prompt }) => ({ ref, kind, statement, severity, reasons, downstream, checked, question, prompt })),
+        alsoCheck: r.items.filter((x) => !x.severity && x.checked).map((x) => x.ref),
+      };
+    },
+  },
+  {
     name: 'lore_select',
     title: 'Claims a change might break',
     description:
@@ -68,7 +87,7 @@ export const TOOLS: Tool[] = [
         : Array.isArray(i.refs) && i.refs.length
         ? (i.refs as string[]).map((ref) => ({ ref }))
         : selectClaims(g, diffFor(root, (i.range as string | undefined) ?? 'HEAD'), { covers: false }).filter((r) => r.severity !== 'low');
-      return check(g, wanted).map(({ ref, kind, statement, severity, question, prompt }) => ({ ref, kind, statement, severity, question, prompt }));
+      return prepare(g, wanted).map(({ ref, kind, statement, severity, question, prompt }) => ({ ref, kind, statement, severity, question, prompt }));
     },
   },
   {
@@ -199,7 +218,7 @@ export function handle(root: string, msg: Json): void {
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: 'lore', title: 'Lore', version: VERSION },
         instructions:
-          "This repository keeps a Lore knowledge graph: invariants (don't break them), decisions (don't re-propose what they rejected) and notes. Read lore_digest before changing code, lore_show for one claim, and lore_trace on a claim or file to see what rests on it; after changing it, run lore_select, check what it reaches with lore_check_context, and add the trailer from lore_record to your commit.",
+          "This repository keeps a Lore knowledge graph: invariants (don't break them), decisions (don't re-propose what they rejected) and notes. Planning: read lore_digest (depth 1) to orient, lore_trace on the files or nodes you'll touch, lore_show for a claim in full. Reviewing: lore_review on the change, answer its prompts from the code, and add the trailer from lore_record to the commit.",
       });
       return;
     }

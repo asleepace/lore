@@ -115,6 +115,12 @@ Node frontmatter holds two fields, `covers` and `verified`.
 The trial used `scope` to decide nothing, and its tree depth says the same. With the tree in the map, links derived and the summary in the lead, nothing else needs to be structured per node. Less frontmatter also means less YAML to break (DEC-11).
 Rejected: keeping `scope`, `parent`, `links` and node `status` as optional fields, which keeps every author deciding whether to fill them.
 
+### DEC-15
+An invariant states the guarantee, not an enumeration of the code that provides it.
+
+GameRelay's sdk#INV-1 listed what a `relay` exposes; checks called it broken on unedited code, because harmless getters had been added since. What mattered, no connection secret reachable, still held. An enumeration is a second copy of the code (DEC-1) that goes stale with every addition.
+Rejected: a lint rule for enumerating invariants, a heuristic that would mostly be noise; `SPEC.md` §4.1 says it instead.
+
 ## Limits
 
 ### LIM-1

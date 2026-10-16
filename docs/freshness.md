@@ -77,6 +77,22 @@ Rejected: following callers of the marked code, which reaches every claim in a l
 
 - depends: freshness#NOTE-2
 
+### DEC-10
+How far to trust reviews is measured per repository with a benchmark: selection recall and noise, false confirmations, false alarms and inferability.
+
+A check can agree with a broken claim (NOTE-1), so trust has to be a number. The first benchmark showed why each measure is separate: selection was the weak stage (17 of 27), the prompt was the fix for false confirmations (3 in 47, then 0 in 53), and false alarms pointed at claim wording, not code. Recall alone would reward selecting everything, so noise is reported too. Inferability, a claim an agent answers from the code alone, catches claims that restate the code.
+Rejected: trusting checks because they look right on a few examples, which is where v0.3 stood after 17 checks.
+
+- depends: freshness#NOTE-1, cli#DEC-10
+
+### DEC-11
+Decisions are checked only after a benchmark shows the decision question finds drift without noise.
+
+Decisions are the largest kind (45 of 75 claims in this repository) and the loop doesn't check them, so the strongest result covers the smallest part of the graph. A decision can be asked about: "does the code still do what this decided, rather than what it rejected?" But a decision is a choice, not a guarantee, and a check that flags every refactor near one would teach people to ignore reviews.
+Rejected: checking decisions now, unmeasured. Rejected: never checking them, which leaves most of the graph to rot unseen.
+
+- depends: freshness#DEC-10
+
 ## Edges
 
 ### EDGE-1
@@ -111,9 +127,9 @@ The verification loop's value depends on how often this happens. `lore bench` me
 - depends: freshness#DEC-5
 
 ### NOTE-2
-Selection sees marker regions and the same-file definitions they use, so a change in a caller or another file reaches nothing; a sweep covers the gap.
+Selection sees marker regions and the same-file definitions they use, so a change in a caller or another file reaches nothing; reviews check every invariant to cover it.
 
-DEC-9 added the definitions.
+DEC-9 added the definitions; [layers#DEC-7](layers.md#dec-7) makes checking every invariant the default when the graph is small.
 
 In the GameRelay trial, removing `'__proto__'` from `UNSAFE_KEYS`, defined about 500 lines above the marked check, selected no claim, while a check with Claude, asked directly, found the break. Marking the definition fixed that case; the sweep (`lore check --sweep`) is for the cases nobody marked.
 

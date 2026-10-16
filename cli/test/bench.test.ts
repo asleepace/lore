@@ -54,7 +54,7 @@ describe('bench', () => {
     expect([out.summary.selected, out.summary.broken, out.results.map((r) => r.outcome)]).toEqual([1, 2, ['unchecked', 'unchecked']]);
     const run = spawnSync('bun', [BIN, '-C', repo.dir, 'bench', join(repo.dir, 'bench.json'), '--agent', `node ${join(repo.dir, 'agent.cjs')}`, '--only', 'off-region'], { encoding: 'utf8' });
     expect(run.status).toBe(1);
-    expect(run.stdout).toContain('| off-region | room#INV-1 | broken | no | holds | missed |');
+    expect(run.stdout).toContain('| off-region | room#INV-1 | broken | no | 0 | holds | missed |');
     expect(run.stdout).toContain('false confirmations 1');
   });
 

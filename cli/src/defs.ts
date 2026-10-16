@@ -3,9 +3,9 @@
  * compares with, the helper it calls. A change there changes what the region means without touching
  * it (freshness#NOTE-2), so `select` reaches the claim and `check` shows the definition.
  *
- * A heuristic for JavaScript-like languages, and deterministic: same file only, top level or class
- * members (indent of at most two spaces), names of three characters or more, never another object's
- * property (`x.name`) or a local.
+ * A heuristic for JavaScript-like languages, and deterministic: same file only, top level or
+ * members of a top-level class (one indent level in), names of three characters or more, never
+ * another object's property (`x.name`) or a local inside a function.
  */
 
 const MAX_DEFINITION_LINES = 20;
@@ -37,15 +37,19 @@ export function definitionsUsed(lines: string[], from: number, to: number, opts:
     if (m[0].replace('#', '').length >= 3 && !names.has(m[0])) names.set(m[0], m.index!);
   }
   const found: (Definition & { at: number })[] = [];
+  // What the last top-level line opened: a class body holds members at the next indent, while
+  // anything indented under a function or a call is a local.
+  let inClass = false;
   lines.forEach((line, i) => {
     const n = i + 1;
+    const indent = /^\s*/.exec(line)![0].length;
+    if (indent === 0 && line.trim() && !/^[}\])]/.test(line) && !/^\s*(\/\/|\*|\/\*)/.test(line)) inClass = /\bclass\b/.test(line);
     if (n >= skipFrom && n <= skipTo) return;
-    if (/^\s*/.exec(line)![0].length > 2) return; // top level or a class member, not a local
+    if (indent > 2 || (indent > 0 && !inClass)) return; // top level or a class member, not a local
     const m = DEFINES.exec(line);
     const name = m?.[1] ?? m?.[2] ?? m?.[3];
     if (!name || NOT_NAMES.has(name) || !names.has(name) || found.some((f) => f.name === name)) return;
     // Up to the closing line at the definition's own indent, for a block; one line otherwise.
-    const indent = /^\s*/.exec(line)![0].length;
     let end = n;
     if (/[{([]\s*$/.test(line)) {
       const close = new RegExp(`^\\s{${indent}}[}\\])]`);

@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { checkAsync, type Verdict } from './check';
+import { checkAll, type Verdict } from './check';
 import { loadGraph } from './graph';
 import { diffFor, selectClaims } from './select';
 import type { Severity } from './types';
@@ -45,6 +45,10 @@ export interface CaseResult {
   expect: 'broken' | 'holds';
   /** The severity selection gave the claim for this diff, or null if it didn't reach it. */
   selected: Severity | null;
+  /** Other claims selection reached at high or medium severity: noise, unless the edit really concerns them. */
+  others: string[];
+  /** The case changed code (a clean control doesn't). */
+  edits: boolean;
   verdict?: Verdict;
   /** `caught`, `missed` (a false confirmation), `alarm` (broken said of a claim that holds), `ok`, `unsure`, or `error` (a bad case, or the agent failed). */
   outcome: 'caught' | 'missed' | 'alarm' | 'ok' | 'unsure' | 'error' | 'unchecked';
@@ -60,6 +64,9 @@ export interface BenchSummary {
   errors: number;
   /** Broken cases whose claim selection reached at high or medium severity (what `check <range>` checks). */
   selected: number;
+  /** Cases with edits, and the other claims their edits reached in all: recall alone would reward selecting everything. */
+  edited: number;
+  othersReached: number;
   caught: number;
   /** "holds" on a broken claim. */
   falseConfirmations: number;
@@ -132,7 +139,7 @@ function trapSignals(): void {
 }
 
 async function runCase(root: string, c: BenchCase, opts: BenchOptions, hide: string[]): Promise<CaseResult> {
-  const base: CaseResult = { id: c.id, ref: normalizeRef(c.ref), expect: c.expect, selected: null, outcome: 'unchecked' };
+  const base: CaseResult = { id: c.id, ref: normalizeRef(c.ref), expect: c.expect, selected: null, others: [], edits: !!c.edits?.length, outcome: 'unchecked' };
   const dir = mkdtempSync(join(tmpdir(), 'lore-bench-'));
   rmSync(dir, { recursive: true, force: true });
   git(root, ['worktree', 'add', '--detach', '--quiet', dir, opts.rev ?? 'HEAD']);
@@ -141,13 +148,14 @@ async function runCase(root: string, c: BenchCase, opts: BenchOptions, hide: str
     applyEdits(dir, c.edits ?? []);
     const graph = loadGraph(dir);
     if (!graph.claims.has(base.ref)) throw new Error(`no claim ${c.ref}`);
-    const hit = selectClaims(graph, diffFor(dir, 'HEAD'), { covers: false }).find((r) => normalizeRef(r.ref) === base.ref);
-    base.selected = hit?.severity ?? null;
+    const picked = selectClaims(graph, diffFor(dir, 'HEAD'), { covers: false });
+    base.selected = picked.find((r) => normalizeRef(r.ref) === base.ref)?.severity ?? null;
+    base.others = picked.filter((r) => normalizeRef(r.ref) !== base.ref && r.severity !== 'low').map((r) => r.ref);
     if (!opts.agent) return base;
     // Selection saw the edits; now take away anything that would give the answer away.
     for (const h of hide) rmSync(join(dir, h), { recursive: true, force: true });
     const started = Date.now();
-    const checked = await checkAsync(loadGraph(dir), base.ref, { agent: opts.agent, timeoutMs: opts.timeoutMs });
+    const [checked] = await checkAll(loadGraph(dir), [{ ref: base.ref }], { agent: opts.agent, timeoutMs: opts.timeoutMs, jobs: 1 });
     base.seconds = Math.round((Date.now() - started) / 100) / 10;
     base.answer = checked!.answer;
     if (checked!.failed) return { ...base, outcome: 'error', error: `agent failed: ${(checked!.answer ?? '').split('\n').pop()!.slice(0, 200)}` };
@@ -194,6 +202,8 @@ export function summarize(results: CaseResult[]): BenchSummary {
     holds: ok.length - broken.length,
     errors: results.length - ok.length,
     selected: broken.filter(sel).length,
+    edited: ok.filter((r) => r.edits).length,
+    othersReached: ok.reduce((n, r) => n + r.others.length, 0),
     caught: ok.filter((r) => r.outcome === 'caught').length,
     falseConfirmations: ok.filter((r) => r.outcome === 'missed').length,
     falseAlarms: ok.filter((r) => r.outcome === 'alarm').length,

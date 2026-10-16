@@ -49,6 +49,16 @@ describe('select', () => {
     expect(selectClaims(loadGraph(repo.dir), diffFor(repo.dir, 'HEAD'), { covers: false })).toEqual([]);
   });
 
+  test("a local inside another function isn't a definition, even at two spaces; a class member is", () => {
+    const code = (v: string) =>
+      `export function prompt() {\n  const host = '${v}';\n  return host;\n}\n\nclass Room {\n  isHost(from: string) {\n    return from === 'h';\n  }\n\n  setState(from: string, host: string) {\n    // ${AT} room#INV-1\n    if (!this.isHost(from) || from !== host) throw new Error('not_host');\n    return true;\n  }\n}\n`;
+    repo = makeRepo({ ...BASE, 'src/room/room.ts': code('a') });
+    repo.write('src/room/room.ts', code('b'));
+    expect(selectClaims(loadGraph(repo.dir), diffFor(repo.dir, 'HEAD'), { covers: false })).toEqual([]);
+    repo.write('src/room/room.ts', code('a').replace("from === 'h'", "from === 'x'"));
+    expect(selectClaims(loadGraph(repo.dir), diffFor(repo.dir, 'HEAD'), { covers: false })[0]?.reasons![0]).toBe('changed isHost (src/room/room.ts:8), used by the marker at 12');
+  });
+
   test('covered files flag every claim of the node at low severity, and only when asked', () => {
     repo = makeRepo(BASE);
     loosen(repo);

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { check, parseVerdict, promptFor } from '../src/check';
+import { checkAll, parseVerdict, promptFor } from '../src/check';
 import { loadGraph } from '../src/graph';
 import { AT, BASE, makeRepo, type Repo } from './helpers';
 
@@ -57,10 +57,10 @@ describe('check', () => {
     expect(parseVerdict('It probably holds.')).toBe('unsure');
   });
 
-  test('an agent command gets each prompt on stdin; a broken claim makes check exit 1', () => {
+  test('an agent command gets each prompt on stdin; a broken claim makes check exit 1', async () => {
     const { r, agent } = withAgent();
     repo = r;
-    expect(check(loadGraph(r.dir), [{ ref: 'room#INV-1' }], { agent })[0]!.verdict).toBe('holds');
+    expect((await checkAll(loadGraph(r.dir), [{ ref: 'room#INV-1' }], { agent }))[0]!.verdict).toBe('holds');
     r.write('src/room/room.ts', BASE['src/room/room.ts']!.replace('if (from !== host)', 'if (false)'));
     const out = lore(r.dir, ['check', 'HEAD', '--agent', agent, '--json']);
     expect(out.code).toBe(1);
@@ -129,7 +129,7 @@ describe('mcp', () => {
 
     expect((replies[1]!.result as { protocolVersion: string }).protocolVersion).toBe('2025-06-18');
     const tools = (replies[2]!.result as { tools: { name: string; inputSchema: object }[] }).tools;
-    expect(tools.map((t) => t.name)).toEqual(['lore_digest', 'lore_select', 'lore_check_context', 'lore_show', 'lore_trace', 'lore_find', 'lore_ask', 'lore_gate', 'lore_record', 'lore_history', 'lore_lint']);
+    expect(tools.map((t) => t.name)).toEqual(['lore_digest', 'lore_review', 'lore_select', 'lore_check_context', 'lore_show', 'lore_trace', 'lore_find', 'lore_ask', 'lore_gate', 'lore_record', 'lore_history', 'lore_lint']);
     const text = (id: number) => ((replies[id]!.result as { content: { text: string }[] }).content[0]!.text);
     expect(text(3)).toContain('room#INV-1');
     const prepared = JSON.parse(text(4)) as { ref: string; prompt: string }[];

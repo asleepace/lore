@@ -7,7 +7,7 @@ verified: 2026-10-16
 
 Why every capability above plain markdown is an opt-in layer, how the verification loop and gates work, and how the protocol is versioned.
 
-L0 format → L1 markers → L2 CLI → L3 CI → L4 agent → L5 push. The table lives in `SPEC.md` §11.
+L0 format → L1 markers → L2 CLI → L3 CI → L4 agent. The table lives in `SPEC.md` §12.
 
 ## Invariants
 
@@ -40,6 +40,8 @@ The agent step runs only when the deterministic step finds affected claims.
 Most PRs touch nothing documented, so they cost $0 and finish fast.
 Rejected: running the agent on every PR.
 
+- superseded_by: layers#DEC-7
+
 ### DEC-3
 Lore is versioned as a protocol: `LORE.md` declares `lore: <major>.<minor>`, minors only add from 1.0, and majors ship migration notes.
 
@@ -68,6 +70,14 @@ Rejected: blocking by default, which makes a new adopter's first week a wall of 
 
 - depends: freshness#INV-1
 
+### DEC-7
+A review checks every active invariant when there are few enough to afford it, ordered by selection; above that, it checks what selection reaches and a sweep covers the rest.
+
+DEC-2 assumed selection was what made checking cheap and correct. The GameRelay benchmark split the two: selection reached 17 of 27 deliberate breaks, while checking each invariant caught all 27, and 45 checks took about two minutes six at a time. Protecting invariants outranks the cost of context ([lore#DEC-6](../LORE.md#dec-6)), so at tens of invariants the review checks them all; selection still decides the order, and what is checked when there are hundreds.
+Rejected: checking only selected claims at any size (DEC-2), which misses breaks in callers and other files. Rejected: always checking everything, which stops scaling past a few hundred invariants.
+
+- depends: freshness#NOTE-2, freshness#DEC-10
+
 ## Quirks
 
 ### QRK-1
@@ -86,3 +96,6 @@ Build the L2 CLI in TypeScript first.
 L5: a `PreToolUse` hook that injects a node's summary and invariants when an agent opens a covered file.
 
 - review_after: 2027-04-15
+- status: retired
+
+> **agent (Claude), 2026-10-16:** Retired as a level: push is an extension (`SPEC.md` §13.2, [lore#DEC-8](../LORE.md#dec-8)). The hook is still worth building once `show` and `trace` have been used by agents for a while.

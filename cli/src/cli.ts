@@ -11,7 +11,8 @@ import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { ask } from './ask';
 import { bench, type BenchSummary, type CaseResult } from './bench';
-import { check, sweepTargets, type CheckRecord } from './check';
+import { review, reviewContext, reviewText } from './review';
+import { checkAll, prepare, sweepTargets, type CheckRecord } from './check';
 import { digest } from './digest';
 import { checkGates } from './gate';
 import { linkFor, loadGraph } from './graph';
@@ -23,10 +24,14 @@ import { tierOf } from './tiers';
 import type { ClaimRecord, Graph, Issue } from './types';
 import { normalizeRef } from './util';
 
-const HELP = `lore: small tools over a Lore graph (spec v0.3)
+const HELP = `lore: small tools over a Lore graph (spec v0.4)
 
 usage: lore [-C <dir>] [--today YYYY-MM-DD] <command> [options] [--json]
 
+  review [<range>|--staged] what a change could break, and whether it does: reached claims, what rests
+         [--agent <cmd>]      on them, and a verdict on every invariant (all of them up to --max 50)
+         [--jobs n] [--max n] [--selected] [--depth n]
+                              without an agent: the review context, for a calling agent to answer
   graph                     the whole graph: nodes, claims, markers, tiers
   lint                      check the graph against the spec (exit 1 on errors)
   digest [--depth 0-3]      render the graph at a depth (default 1)
@@ -37,6 +42,7 @@ usage: lore [-C <dir>] [--today YYYY-MM-DD] <command> [options] [--json]
   check [<range>|<ref>...|-] check claims against the code with a model command; exit 1 if any broken
         [--agent <cmd>]       (or $LORE_AGENT) reads a prompt on stdin, prints "VERDICT: holds|broken|unsure"
         [--all]               with a range, also check low-severity claims
+        [--jobs <n>]          checks at once (default 4)
         [--sweep]             every active invariant, whatever changed (selection only sees marker regions)
                               without an agent: print the prompts, for a calling agent to answer
   gate [<range>|--staged]   invariant gates for a change; exit 1 if unmet and gate is block
@@ -99,7 +105,8 @@ function refsFrom(pos: string[]): { ref: string }[] {
   if (!text) return [];
   if (text.startsWith('[') || text.startsWith('{')) {
     const data = JSON.parse(text) as unknown;
-    const arr = Array.isArray(data) ? data : ((data as { claims?: unknown[] }).claims ?? [data]);
+    const obj = data as { claims?: unknown[]; items?: unknown[] };
+    const arr = Array.isArray(data) ? data : (obj.claims ?? obj.items ?? [data]);
     return arr.map((x) => (typeof x === 'string' ? { ref: x } : (x as { ref: string })));
   }
   return text.split('\n').map((l) => l.trim().split(/\s+/)[0]!).filter(Boolean).map((ref) => ({ ref }));
@@ -163,14 +170,15 @@ function showText(x: Shown | NodeShown): string {
 
 function benchText(results: CaseResult[], s: BenchSummary, checked: boolean): string {
   const pct = (n: number, d: number) => (d ? `${Math.round((100 * n) / d)}%` : 'n/a');
-  const head = '| Case | Claim | Expect | Selected | Verdict | Outcome |\n|---|---|---|---|---|---|\n';
+  const head = '| Case | Claim | Expect | Selected | Others | Verdict | Outcome |\n|---|---|---|---|---|---|---|\n';
   const rows = results
-    .map((r) => `| ${r.id} | ${r.ref} | ${r.expect} | ${r.selected ?? 'no'} | ${r.verdict ?? '-'} | ${r.error ? `error: ${cell(r.error)}` : r.outcome} |`)
+    .map((r) => `| ${r.id} | ${r.ref} | ${r.expect} | ${r.selected ?? 'no'} | ${r.others.length} | ${r.verdict ?? '-'} | ${r.error ? `error: ${cell(r.error)}` : r.outcome} |`)
     .join('\n');
   const lines = [
     '',
     `${s.cases} cases: ${s.broken} broken, ${s.holds} intact${s.errors ? `, ${s.errors} errors` : ''}`,
     `selection reached ${s.selected} of ${s.broken} broken claims (${pct(s.selected, s.broken)})`,
+    `selection noise: ${s.othersReached} other claims reached across ${s.edited} edits (${s.edited ? (s.othersReached / s.edited).toFixed(1) : '0'} per edit)`,
   ];
   if (checked) {
     lines.push(
@@ -212,9 +220,14 @@ export function main(argv: string[]): number {
   if (args.cmd === 'record') {
     const [what, ...refs] = args.pos;
     if (what !== 'verified' && what !== 'ack') return usage('record verified|ack <ref>...');
-    // Records piped from `check` carry a verdict: only claims that hold are verified.
+    // Records piped from `check` or `review` carry a verdict: only claims that hold are verified.
     const list = refsFrom(refs)
-      .filter((r) => what !== 'verified' || (r as Partial<CheckRecord>).verdict === undefined || (r as Partial<CheckRecord>).verdict === 'holds')
+      .filter((r) => {
+        if (what !== 'verified') return true;
+        const c = r as Partial<CheckRecord> & { checked?: boolean };
+        // A review's unchecked items (decisions, notes) were never judged, so they aren't verified.
+        return c.checked !== false && (c.verdict === undefined || c.verdict === 'holds');
+      })
       .map((r) => normalizeRef(r.ref));
     const line = `Lore-${what === 'ack' ? 'Ack' : 'Verified'}: ${list.join(', ')}`;
     if (!list.length) {
@@ -270,6 +283,38 @@ export function main(argv: string[]): number {
       return 0;
     }
 
+    case 'review': {
+      const opts = {
+        range: args.pos[0],
+        staged: args.flags.has('--staged'),
+        max: Number(args.flags.get('--max')?.[0] ?? '50'),
+        selectedOnly: args.flags.has('--selected'),
+        depth: Number(args.flags.get('--depth')?.[0] ?? '1'),
+      };
+      const agent = args.flags.get('--agent')?.[0] ?? process.env.LORE_AGENT;
+      if (!agent) {
+        const ctx = reviewContext(graph, opts);
+        print(json, ctx, () => reviewText(ctx, false));
+        return 0;
+      }
+      review(graph, {
+        ...opts,
+        agent,
+        jobs: Number(args.flags.get('--jobs')?.[0] ?? '6'),
+        timeoutMs: Number(args.flags.get('--timeout')?.[0] ?? '240') * 1000,
+        onResult: (r) => process.stderr.write(`${(r.verdict ?? 'unsure').padEnd(6)} ${r.ref}\n`),
+      })
+        .then((r) => {
+          print(json, r, () => reviewText(r, true));
+          process.exit(r.items.some((i) => i.verdict === 'broken') ? 1 : 0);
+        })
+        .catch((err: Error) => {
+          process.stderr.write(`lore: ${err.message}\n`);
+          process.exit(2);
+        });
+      return -1;
+    }
+
     case 'select': {
       const records = selectClaims(graph, diffFor(root, args.pos[0], args.flags.has('--staged')), { covers: !args.flags.has('--no-covers') });
       print(json, records, () => recordsText(records));
@@ -297,17 +342,25 @@ export function main(argv: string[]): number {
       }
       const agent = args.flags.get('--agent')?.[0] ?? process.env.LORE_AGENT;
       const timeoutMs = Number(args.flags.get('--timeout')?.[0] ?? '180') * 1000;
-      const results = check(graph, wanted, { agent, timeoutMs });
       if (!agent) {
+        const results = prepare(graph, wanted);
         print(json, results, () => results.map((r) => `=== ${r.ref}\n${r.prompt}\n`).join('\n') || 'no claims\n');
         return 0;
       }
-      print(json, results, () =>
-        results.length
-          ? results.map((r) => `${(r.verdict ?? 'unsure').padEnd(6)} ${r.ref}  ${r.statement}\n         ${(r.answer ?? '').split('\n').slice(1).join(' ').trim().slice(0, 300)}`).join('\n') + '\n'
-          : 'no claims\n',
-      );
-      return results.some((r) => r.verdict === 'broken') ? 1 : 0;
+      checkAll(graph, wanted, { agent, timeoutMs, jobs: Number(args.flags.get('--jobs')?.[0] ?? '4') })
+        .then((results) => {
+          print(json, results, () =>
+            results.length
+              ? results.map((r) => `${(r.verdict ?? 'unsure').padEnd(6)} ${r.ref}  ${r.statement}\n         ${(r.answer ?? '').split('\n').slice(1).join(' ').trim().slice(0, 300)}`).join('\n') + '\n'
+              : 'no claims\n',
+          );
+          process.exit(results.some((r) => r.verdict === 'broken') ? 1 : 0);
+        })
+        .catch((err: Error) => {
+          process.stderr.write(`lore: ${err.message}\n`);
+          process.exit(2);
+        });
+      return -1;
     }
 
     case 'gate': {
