@@ -1,7 +1,6 @@
 ---
 lore: 0.2
 scope: app
-summary: "Lore is a versioned markdown protocol, plus optional tooling, for an agent-maintained knowledge graph of a repo's rationale, invariants, edges and quirks."
 nodes: [docs]
 covers: [SPEC.md, README.md]
 verified: 2026-10-16
@@ -9,6 +8,8 @@ review_after: 90d
 ---
 
 # Lore
+
+Lore is a versioned markdown protocol, plus optional tooling, for an agent-maintained knowledge graph of a repo's rationale, invariants, edges and quirks.
 
 This repository defines Lore and documents itself with it. `SPEC.md` is the source of truth for the rules; these nodes hold the reasoning behind them.
 

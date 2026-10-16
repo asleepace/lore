@@ -8,8 +8,8 @@ A first slice of Lore on asleepace/gamerelay.io (PR #225): 10 nodes, 68 claims, 
 files, on a monorepo whose `docs/` already held narrative docs. Checked with a throwaway lint script.
 
 Triaged into v0.2 (`SPEC.md` §14): `LORE.md` as entry point with `nodes:` routing (format#DEC-8),
-versioning (layers#DEC-3), open sections (format#DEC-9), comments (format#DEC-10), quoted summaries
-and `L015`, narrow `covers` guidance, `Rejected:` on its own line. Still open:
+versioning (layers#DEC-3), open sections (format#DEC-9), comments (format#DEC-10), summaries as lead paragraphs (format#DEC-11)
+with a YAML subset and `L015`, narrow `covers` guidance, `Rejected:` on its own line. Still open:
 
 - **[freshness] Most "asserted" claims can't be anchored.** 15 of 37 tiered claims stayed
   asserted; most were accepted limits ("one relay host") or invariants about absence ("no runtime

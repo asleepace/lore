@@ -1,7 +1,6 @@
 ---
 scope: domain
 parent: lore
-summary: "Why every capability above plain markdown is an opt-in layer, the rules agents follow, and how the protocol is versioned."
 covers: [SPEC.md, README.md]
 links:
   - { to: freshness, rel: depends_on, note: "L3/L4 run the staleness rules" }
@@ -10,6 +9,8 @@ review_after: 90d
 ---
 
 # Layers
+
+Why every capability above plain markdown is an opt-in layer, the rules agents follow, and how the protocol is versioned.
 
 L0 format → L1 markers → L2 CLI → L3 CI → L4 agent → L5 push. The table lives in `SPEC.md` §11.
 

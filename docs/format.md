@@ -1,7 +1,6 @@
 ---
 scope: domain
 parent: lore
-summary: "Why nodes, claims and IDs are shaped the way they are, where nodes live, and what else a node may hold."
 covers: [SPEC.md]
 links:
   - { to: markers, rel: related, note: "markers use the same full reference form" }
@@ -10,6 +9,8 @@ review_after: 90d
 ---
 
 # Format
+
+Why nodes, claims and IDs are shaped the way they are, where nodes live, and what else a node may hold.
 
 ## Invariants
 
@@ -89,6 +90,12 @@ Comments are signed blockquotes on a claim, or a `## Comments` section on a node
 
 People want to leave a doubt or a "this bit us again" next to a claim without rewriting it. A blockquote renders as an aside, needs no tooling, and the signature says whose it is, so an agent can add its own but never edit someone else's.
 Rejected: comments as a seventh claim type with IDs, which makes every remark permanent and numbered. Rejected: HTML comments only, which hide them from the people they're for.
+
+### DEC-11
+A node's summary is its lead paragraph, and frontmatter holds only structured values in a small YAML subset.
+
+In the GameRelay trial 6 of 11 frontmatter summaries were invalid YAML, because sentences have colons. Prose in markdown can't break, reads naturally on GitHub, and follows the rule claims already use: the first paragraph is the statement. With no prose left in frontmatter, Lore can define the subset it accepts and give precise errors.
+Rejected: quoting `summary` (an earlier v0.2 draft), which keeps a trap every author falls into once. Rejected: letting each repo choose its metadata format (YAML, TOML, JSON), which splits tools and repos into dialects.
 
 ## Limits
 

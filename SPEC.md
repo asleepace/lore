@@ -40,9 +40,12 @@ packages/sdk/lore/       # another node folder, listed in LORE.md
 ---
 lore: 0.2
 scope: app
-summary: "GameRelay adds multiplayer to single-file browser games."
 nodes: [docs, packages/sdk/lore]
 ---
+
+# GameRelay
+
+Multiplayer for single-file browser games: a relay that owns membership and an SDK that does the netcode.
 ```
 
 - A repository has exactly one graph and exactly one `LORE.md`, at its root. Its ID is `lore`.
@@ -61,8 +64,8 @@ packages, a published library), not for a second hierarchy. <!-- @lore enforces 
 
 ### 2.2 Earlier layouts
 
-- A v0.1 graph has `APP.md` as its root (ID `app`, `spec: lore/0.1`) and MAY name its node folder in `.lore/config.json` (`{ "dir": "lore" }`). Tools MUST read v0.1 graphs (§13): when there is no `LORE.md`, `APP.md` is the root; `app` is accepted as an alias of `lore` in references; `.lore/config.json`'s `dir` acts as `nodes: [dir]`.
-- To migrate: rename `APP.md` to `LORE.md`, replace `spec: lore/0.1` with `lore: 0.2`, move any `dir` into `nodes`, and set `parent: lore` where it said `app`. References to `app#…` keep working through the alias; a formatter MAY rewrite them.
+- A v0.1 graph has `APP.md` as its root (ID `app`, `spec: lore/0.1`) and MAY name its node folder in `.lore/config.json` (`{ "dir": "lore" }`). Tools MUST read v0.1 graphs (§12): when there is no `LORE.md`, `APP.md` is the root; `app` is accepted as an alias of `lore` in references; `.lore/config.json`'s `dir` acts as `nodes: [dir]`; a frontmatter `summary` stands in for the lead (§4.2).
+- To migrate: rename `APP.md` to `LORE.md`, replace `spec: lore/0.1` with `lore: 0.2`, move any `dir` into `nodes`, set `parent: lore` where it said `app`, and move each `summary:` into the node's lead paragraph. References to `app#…` keep working through the alias. A formatter MAY do all of it.
 
 ## 3. Identifiers
 
@@ -110,7 +113,6 @@ packages, a published library), not for a second hierarchy. <!-- @lore enforces 
 ---
 scope: feature
 parent: security
-summary: "Pre-publish content screening: an LLM classifier with a rules fallback."
 covers: [src/moderation/**, src/api/posts/create.ts]
 links:
   - { to: llms, rel: depends_on, note: "classifier model choice, see DEC-3" }
@@ -119,7 +121,9 @@ verified: 2026-10-15
 
 # Moderation
 
-Optional free-form context. Keep it short; claims carry the weight.
+Pre-publish content screening: an LLM classifier with a rules fallback.
+
+Optional further context. Keep it short; claims carry the weight.
 
 ## Invariants
 
@@ -147,8 +151,18 @@ the thing locally.
 
 ### 4.1 Frontmatter
 
-Frontmatter is YAML. **Quote `summary`** (and any other prose value): a sentence with a colon in it
-is not valid YAML unquoted, and a node whose frontmatter doesn't parse is invalid (`L015`).
+Frontmatter holds structured values only: identifiers, dates, durations, globs and lists of them.
+Prose goes in the body, starting with the lead (§4.2). <!-- @lore enforces format#DEC-11 -->
+
+**Lore frontmatter** is a subset of YAML, so any YAML parser reads it and a Lore tool can parse it
+with a small parser of its own and precise errors:
+
+- one `key: value` per line, keys from `[a-z_]`;
+- scalars: identifiers, numbers, dates (`2026-10-16`), durations (`90d`) and globs, unquoted, or any text in double quotes;
+- flow lists: `[a, b, c]`;
+- block lists of flow maps, for `links`: `  - { to: llms, rel: depends_on, note: "…" }`, with `note` double-quoted.
+
+Anything a YAML parser can't read is `L015`; anything outside the subset that it can read is `L019` (warn).
 
 | Field | Required | Description |
 |---|---|---|
@@ -156,7 +170,7 @@ is not valid YAML unquoted, and a node whose frontmatter doesn't parse is invali
 | `nodes` | no, `LORE.md` only | Node folders (§2). Default `[docs]`. |
 | `scope` | yes | `app` \| `domain` \| `feature` \| `edge` |
 | `parent` | yes, except `LORE.md` | Node ID of the parent. Forms the zoom tree. |
-| `summary` | yes | One sentence. Lets a reader decide whether to open the node. |
+| `summary` | no | v0.1's summary. Read as the lead when a node has no lead paragraph; a node with both gets `L020`. |
 | `covers` | no | Globs of files this node describes. Drives node-level staleness. Keep it narrow (§8). |
 | `links` | no | Typed outbound links: `{ to, rel, note? }`. |
 | `verified` | no | Date (`2026-10-15`) a human or agent last confirmed the node is accurate. See §4.1.1. |
@@ -176,8 +190,9 @@ Link `rel` values: `depends_on`, `interacts_with`, `related`. Tools MUST accept 
 ### 4.2 Body
 
 1. One `# Title` (H1).
-2. **Claim sections**: `## Invariants`, `## Decisions`, `## Edges`, `## Limits`, `## Quirks`, `## Plans`. Each optional. They SHOULD appear in this order, but order carries no meaning, so formatters MAY reorder them and lint MUST NOT treat order as an error. <!-- @lore enforces format#DEC-7 -->
-3. **Open sections**: any other `##` heading (`## Context`, `## Notes`, `## Glossary`, `## Open questions`, `## Comments`, or anything else). As many as needed, anywhere in the node, before, between or after claim sections. An open section holds anything that matters but isn't a claim, in any markdown. It MUST NOT contain claims (an `### INV-1` heading there is `L003`). <!-- @lore enforces format#DEC-9 -->
+2. **The lead**: the first paragraph after the title, before any `##` section. It is the node's summary: one sentence that lets a reader decide whether to open the node, the same way a claim's first paragraph is the claim. Required (`L004`). Tools and agents that list nodes show the lead. <!-- @lore enforces format#DEC-11 -->
+3. **Claim sections**: `## Invariants`, `## Decisions`, `## Edges`, `## Limits`, `## Quirks`, `## Plans`. Each optional. They SHOULD appear in this order, but order carries no meaning, so formatters MAY reorder them and lint MUST NOT treat order as an error. <!-- @lore enforces format#DEC-7 -->
+4. **Open sections**: any other `##` heading (`## Context`, `## Notes`, `## Glossary`, `## Open questions`, `## Comments`, or anything else). As many as needed, anywhere in the node, before, between or after claim sections. An open section holds anything that matters but isn't a claim, in any markdown. It MUST NOT contain claims (an `### INV-1` heading there is `L003`). <!-- @lore enforces format#DEC-9 -->
 
 Tools MUST NOT parse open sections for meaning: they are for readers. Staleness still covers them at node level, through `covers` and `verified`.
 
@@ -324,7 +339,7 @@ ignore it; anchor the relevant region with markers instead.
 | `L001` | error | Reference to a nonexistent node or claim |
 | `L002` | error | Duplicate claim ID within a node |
 | `L003` | error | Claim prefix does not match its section, or a claim inside an open section |
-| `L004` | error | Missing required frontmatter field |
+| `L004` | error | Missing required frontmatter field, or a node with no lead paragraph |
 | `L005` | error | `parent` missing, cyclic, or not reaching `lore` |
 | `L006` | error | Marker uses a local reference or unknown verb |
 | `L007` | warn | `PLAN` claim without `review_after` |
@@ -339,6 +354,8 @@ ignore it; anchor the relevant region with markers instead.
 | `L016` | error | Two node folders hold the same node ID |
 | `L017` | error | A node folder holds a markdown file that isn't a node (no frontmatter) |
 | `L018` | error | `lore` version missing, or a major version the tool doesn't support |
+| `L019` | warn | Frontmatter outside the Lore subset (§4.1), though valid YAML |
+| `L020` | warn | Both a frontmatter `summary` and a lead paragraph (they can drift) |
 
 Tools MUST NOT report open sections, unknown frontmatter fields, unknown metadata keys or comments.
 
@@ -394,7 +411,7 @@ From the GameRelay trial (a 10-node, 68-claim graph on its monorepo; asleepace/g
 - **Versioning** (§12): `lore: <major>.<minor>` in `LORE.md` (was `spec: lore/0.1`), compatibility rules, tools ignore what they don't know, migration notes for v0.1 (§2.2).
 - **Open sections** (§4.2): any non-claim `##` section, as many as needed, anywhere in a node. Was: optional free-form sections before the claims only.
 - **Comments** (§4.4): signed blockquotes on a claim, or a `## Comments` section; ignored by lint; agents may add but never edit others'.
-- **Quote `summary`** (§4.1): 6 of 11 summaries in the trial were invalid YAML unquoted. New `L015`.
+- **The summary is the node's lead paragraph**, not a frontmatter field (§4.2). 6 of 11 summaries in the trial were invalid YAML, because sentences have colons; prose now lives in markdown, where nothing breaks it. Frontmatter is a small YAML subset for structured values only (§4.1). `summary:` is still read for v0.1 graphs. New `L015`, `L019`, `L020`.
 - **Projects may add their own frontmatter fields**; tools ignore unknown fields and metadata keys.
 - **`covers` guidance** (§8): keep it narrow. In the trial, one shared 1,700-line file in `covers` would have flagged its node on 18 of the last 80 commits.
 - **`Rejected:` starts its own line** (§4.3). 7 of 26 trial decisions wrote it mid-paragraph.

@@ -1,7 +1,6 @@
 ---
 scope: domain
 parent: lore
-summary: "Why Lore signals how much to trust each claim, and how staleness is detected without an LLM."
 covers: [SPEC.md]
 links:
   - { to: markers, rel: depends_on, note: "marker regions drive claim-level staleness" }
@@ -10,6 +9,8 @@ review_after: 90d
 ---
 
 # Freshness
+
+Why Lore signals how much to trust each claim, and how staleness is detected without an LLM.
 
 The primary reader is an agent, and agents trust text literally. A stale invariant is worse than no invariant, so telling the reader how far to trust each claim is the core feature, not an extra.
 
