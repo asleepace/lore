@@ -1,15 +1,13 @@
 ---
-lore: 0.2
-scope: app
+lore: 0.3
 nodes: [docs]
 covers: [SPEC.md, README.md]
 verified: 2026-10-16
-review_after: 90d
 ---
 
 # Lore
 
-Lore is a versioned markdown protocol, plus optional tooling, for an agent-maintained knowledge graph of a repo's rationale, invariants, edges and quirks.
+Lore is a versioned markdown protocol for the knowledge code can't hold, kept honest by checks that run on every change.
 
 This repository defines Lore and documents itself with it. `SPEC.md` is the source of truth for the rules; these nodes hold the reasoning behind them.
 
@@ -17,14 +15,14 @@ This repository defines Lore and documents itself with it. `SPEC.md` is the sour
 
 - [format](docs/format.md): how nodes, claims and IDs are written, where nodes live, and what else a node may hold.
 - [markers](docs/markers.md): how code (or any file) points at claims.
-- [freshness](docs/freshness.md): trust tiers and staleness detection.
-- [layers](docs/layers.md): progressive enhancement from plain markdown to agents, and how the protocol is versioned.
+- [freshness](docs/freshness.md): trust tiers, staleness and verification.
+- [layers](docs/layers.md): progressive enhancement from plain markdown to agents, the verification loop, and how the protocol is versioned.
 
 ## Trials
 
 - **GameRelay** (asleepace/gamerelay.io#225, 2026-10-16): 10 nodes, 68 claims, 26 markers on a
-  monorepo with existing narrative docs. Most of v0.2 came from it; its findings are in that repo's
-  `lore/_inbox.md` and in this repo's [inbox](docs/_inbox.md).
+  monorepo with existing narrative docs. Most of v0.2 and v0.3 came from it; its findings are in
+  that repo's `lore/_inbox.md` and in this repo's [inbox](docs/_inbox.md).
 
 ## Invariants
 
@@ -46,6 +44,18 @@ One graph per repository.
 
 Cross-repo links can't be verified atomically because each repo has its own history. Higher-level graphs can come later as federation.
 Rejected: org-level graphs in v0.
+
+### DEC-3
+A node folder can be declared public: its claims are a package's contract, readable on their own and shipped with it.
+
+The GameRelay trial put markers in an SDK that is mirrored to a public repository, pointing at nodes its readers can't open. A public folder ships with the package, can't reference private nodes, and makes weakening a guarantee visible as a breaking change.
+Rejected: stripping markers on export, which hides the problem instead of giving the package its own claims. Rejected: cross-repo references (DEC-2).
+
+### DEC-4
+The core stays closed: three claim kinds and no declared extensions, until two trials ask for the same one.
+
+v0.3 compared a minimal closed format with a core plus declared profiles. The closed one keeps every graph readable by every agent and tool without learning a dialect; the profile version's two pieces the goals needed (`depends:`, public folders) were taken on their own.
+Rejected: profiles and declared claim types now, which buy flexibility no trial has asked for at the cost of dialects.
 
 ## Limits
 

@@ -1,11 +1,6 @@
 ---
-scope: domain
-parent: lore
 covers: [SPEC.md]
-links:
-  - { to: freshness, rel: related, note: "marker regions are the main staleness signal" }
 verified: 2026-10-16
-review_after: 90d
 ---
 
 # Markers
@@ -33,11 +28,20 @@ A marker's verb sets how strongly a change near it affects the claim.
 `enforces` means this code makes the claim true, `implements` means it carries the claim out, and `see` is informational and never flags anything. Three verbs keep the grammar small enough to remember.
 Rejected: a single verb, which can't tell code that makes a claim true from code that merely mentions it.
 
+- status: superseded
+- superseded_by: markers#DEC-4
+
 ### DEC-3
 In markdown, only markers inside HTML comments count, and never inside fenced code or inline code.
 
 Markdown files can uphold claims (this repo anchors every invariant in `SPEC.md`), but they also show markers as examples. Requiring an HTML comment outside code separates the two with one rule.
 Rejected: skipping fenced blocks only, which still miscounted an example in inline code (`<!-- … -->` in backticks) as a real anchor.
+
+### DEC-4
+A marker is `@lore <ref>` (this code upholds the claim) or `@lore see <ref>` (informational); how much a change matters comes from the claim's kind, not the marker.
+
+In the GameRelay trial the line between `enforces` and `implements` was a judgement call on every marker, and it decided severity. The claim's kind already says how much is at stake: breaking an invariant is serious, drifting from a decision less so. Moving severity there leaves the marker one job, saying "this code is the one", and keeps `see` for context. v0.2 verbs are still read.
+Rejected: three verbs (DEC-2). Rejected: no `see` form, which forces informational pointers into prose where tools can't find them.
 
 ## Limits
 

@@ -2,24 +2,22 @@
 
 > **L**inked **O**bservations, **R**ationale & **E**dges
 
-A living, agent-maintained knowledge graph for a codebase, written in plain markdown and checked into git.
-
-Lore captures what code can't say: the **why**, the **invariants**, the **decisions**, the **edge cases** where modules meet, and the **quirks** you only learn by breaking them. It doesn't restate what the code already does.
+A protocol for the knowledge code can't hold: why it is the way it is, what must stay true, and what was tried and rejected. Plain markdown in the repository, read mostly by agents, and kept honest by checks that run on every change.
 
 ## Core ideas
 
-- **One entry point, any layout.** `LORE.md` at the repo root is the root node. It declares the protocol version (`lore: 0.2`) and routes to the folders that hold the other nodes (`nodes: [docs]` by default, or several, like `[docs, packages/sdk/lore]`). Every file in a node folder is a node, and the filename is its ID.
-- **Typed, stable claim IDs.** Claims are headings like `### INV-1` under `## <Type>` sections, addressed as `node#TYPE-n` (e.g. `moderation#INV-1`). Numbers are never reused; retired claims stay as tombstones.
-  - `INV` invariant · `DEC` decision · `EDGE` module interaction · `LIM` known limit · `QRK` quirk · `PLAN` future work
-- **IDs are links.** `moderation#INV-1` resolves to `docs/moderation.md#inv-1`, so it works natively on GitHub and in editors.
-- **Code points at claims.** Language-agnostic marker comments tie code to the docs:
+- **Claims, not pages.** Knowledge is a set of short statements with stable IDs, in three kinds that tell an agent how to act:
+  - `INV` invariant, a **guardrail**: don't break it.
+  - `DEC` decision, a **prior**: don't re-propose what its `Rejected:` line ruled out.
+  - `NOTE` note, **context**: known behavior, limits, quirks.
+- **IDs are links.** `room#INV-2` resolves to `docs/room.md#inv-2`, on GitHub and in editors, with no tooling.
+- **Code points at claims.** A comment says which code upholds what:
   ```ts
-  // @lore enforces moderation#INV-1
+  // @lore room#INV-2
   ```
-  The verb sets how strongly a code change flags the claim: `enforces` > `implements` > `see`.
-- **Room for what isn't a claim.** Nodes can hold open sections of any name (notes, a glossary, open questions) and signed comments on claims; tools leave them alone.
-- **A versioned protocol.** From 1.0, minor versions only add, and tools ignore what they don't know; majors ship migration notes.
-- **Freshness is the core feature.** Staleness is detected deterministically from diffs, `covers:` globs and markers. Agents propose updates; humans approve them in PR review.
+- **One entry point.** `LORE.md` at the root holds the protocol version, the folders that hold nodes, and a map that is the whole hierarchy. Every other edge is derived from references, including commits and PRs.
+- **Zoom.** Every layer opens with a summary of the next, so a graph renders at any depth: a page to orient, claim sentences for the area being changed, full text for what a change might break.
+- **The verification loop.** A change selects the claims it might break (deterministically), each becomes a question, an agent checks it against the new code, and only mismatches reach a person. Documentation that tests itself.
 
 ## Progressive enhancement
 
@@ -27,16 +25,16 @@ Every layer is opt-in. If all tooling is deleted, the docs remain valid, useful 
 
 | Level | Adds | Requires |
 |---|---|---|
-| L0 Format | `LORE.md`, nodes, frontmatter, claim IDs | Nothing |
+| L0 Format | `LORE.md`, nodes, claims | Nothing |
 | L1 Markers | `@lore` comments in code | Nothing (grep) |
-| L2 CLI | Lint, staleness, graph queries | Local binary |
-| L3 CI | Diff → affected claims | GitHub Action |
-| L4 Agent | Proposed doc updates on PRs | API key |
-| L5 Push | Context injection when agents open files | Claude Code hook / MCP |
+| L2 CLI | Lint, trust tiers, staleness, digests | A `lore` binary |
+| L3 CI | Affected claims and invariant gates on every PR | A CI action |
+| L4 Agent | Claim checks and self-evaluation | A model |
+| L5 Push | The claims covering a file, injected when an agent opens it | An editor or agent hook |
 
 ## Status
 
-Early design. See [`SPEC.md`](SPEC.md) for the v0.2 draft. Trials so far: this repository (it documents itself, from [`LORE.md`](LORE.md)) and GameRelay's monorepo. The first pass on a real codebase doubles as a code review: writing exact claims surfaces inconsistencies nobody had noticed.
+Draft. [`SPEC.md`](SPEC.md) is v0.3. Trials so far: this repository (it documents itself, from [`LORE.md`](LORE.md)) and GameRelay's monorepo, where the first pass doubled as a code review: writing exact claims surfaced an inconsistency nobody had noticed.
 
 ## License
 

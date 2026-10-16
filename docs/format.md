@@ -1,11 +1,6 @@
 ---
-scope: domain
-parent: lore
 covers: [SPEC.md]
-links:
-  - { to: markers, rel: related, note: "markers use the same full reference form" }
 verified: 2026-10-16
-review_after: 90d
 ---
 
 # Format
@@ -61,6 +56,9 @@ Each node folder stays flat; the zoom tree lives in `parent:`.
 A graph forced into folders gets one hierarchy baked into paths, and moving a node changes its path. v0.2 allows several node folders (DEC-8), each still flat.
 Rejected: nested folders like `docs/security/moderation.md`.
 
+- status: superseded
+- superseded_by: format#DEC-13
+
 ### DEC-6
 Decisions record what was rejected, on a line starting with `Rejected:`.
 
@@ -97,6 +95,24 @@ A node's summary is its lead paragraph, and frontmatter holds only structured va
 In the GameRelay trial 6 of 11 frontmatter summaries were invalid YAML, because sentences have colons. Prose in markdown can't break, reads naturally on GitHub, and follows the rule claims already use: the first paragraph is the statement. With no prose left in frontmatter, Lore can define the subset it accepts and give precise errors.
 Rejected: quoting `summary` (an earlier v0.2 draft), which keeps a trap every author falls into once. Rejected: letting each repo choose its metadata format (YAML, TOML, JSON), which splits tools and repos into dialects.
 
+### DEC-12
+There are three claim kinds (`INV`, `DEC`, `NOTE`), and each tells an agent how to act: a guardrail, a prior, context.
+
+In the GameRelay trial, classifying claims among six types cost the most time for the least value: `EDGE` was used once, and limits, quirks and parts of invariants blurred together. What the reader needs from a kind is what to do with it: don't break it, don't re-propose what it rejected, or take it into account. Three kinds answer that; `NOTE` absorbs limits, quirks and edges. Plans left claims entirely: every trial plan pointed at another document.
+Rejected: keeping six types (v0.2). Rejected: two kinds (rules and notes), which loses the `Rejected:` line's home and the "don't re-propose" behavior.
+
+### DEC-13
+The map in `LORE.md` is the tree, and every other edge in the graph is derived from references.
+
+`parent:` brought back the single hierarchy DEC-5 kept out of folders (the trial had to pick whether host health belonged to the room or the SDK), and most nodes hung off the root anyway. `links:` restated references already in the prose. A nested list in one file is the whole hierarchy, readable by a person, and moving a node is a one-line edit; references in prose, markers, `depends:`, commits and PRs give the rest of the graph without declaring it twice.
+Rejected: `parent:` and `links:` (v0.2). Rejected: no tree at all, which loses depth-1 digests and the reading order a map gives.
+
+### DEC-14
+Node frontmatter holds two fields, `covers` and `verified`.
+
+The trial used `scope` to decide nothing, and its tree depth says the same. With the tree in the map, links derived and the summary in the lead, nothing else needs to be structured per node. Less frontmatter also means less YAML to break (DEC-11).
+Rejected: keeping `scope`, `parent`, `links` and node `status` as optional fields, which keeps every author deciding whether to fill them.
+
 ## Limits
 
 ### LIM-1
@@ -104,7 +120,7 @@ Renaming a node breaks every reference to it.
 
 Node IDs are filenames (DEC-2), and there is no redirect mechanism yet.
 
-> **agent (Claude), 2026-10-16:** Renaming the root from `APP.md` to `LORE.md` in v0.2 hit this: the spec keeps `app` as an alias of `lore` (SPEC.md §2.2) so existing references keep working. The same alias idea could become the general rename mechanism.
+> **agent (Claude), 2026-10-16:** Renaming the root from `APP.md` to `LORE.md` in v0.2 hit this: the spec keeps `app` as an alias of `lore` (SPEC.md §12.1) so existing references keep working. The same alias idea could become the general rename mechanism.
 
 ## Quirks
 

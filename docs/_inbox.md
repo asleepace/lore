@@ -2,6 +2,20 @@
 
 Unsorted findings waiting to be triaged into claims or spec changes. Not a node (see `SPEC.md` §9).
 
+## v0.3 tool run (2026-10-16)
+
+A throwaway v0.3 tool (lint, digest, select) run on both graphs:
+
+- **[format] v0.1 leads were context, not summaries.** In GameRelay's v0.1 nodes the first paragraph
+  was often "Long form: PLAN.md…", because the summary lived in frontmatter, so depth-1 digests
+  read badly. Fixed in `SPEC.md` §12.1: a legacy `summary` wins over the first paragraph.
+- **[freshness] Digests are small.** GameRelay renders at 27, 261, about 1,490 and about 2,890
+  words for depths 0–3: the whole repository's map in a few hundred tokens.
+- **[freshness] Selection is precise once regions stop at blank lines.** Loosening the host-only
+  state check in `Room.ts` selects exactly one high-severity claim (room#INV-2); a first version
+  of the tool that ignored region ends also flagged the neighbouring room#INV-4.
+- **[layers] Still unmeasured:** false confirmations in the check step (freshness#NOTE-1).
+
 ## From the GameRelay trial (2026-10-16)
 
 A first slice of Lore on asleepace/gamerelay.io (PR #225): 10 nodes, 68 claims, 26 markers in 11
@@ -11,14 +25,12 @@ Triaged into v0.2 (`SPEC.md` §14): `LORE.md` as entry point with `nodes:` routi
 versioning (layers#DEC-3), open sections (format#DEC-9), comments (format#DEC-10), summaries as lead paragraphs (format#DEC-11)
 with a YAML subset and `L015`, narrow `covers` guidance, `Rejected:` on its own line. Still open:
 
-- **[freshness] Most "asserted" claims can't be anchored.** 15 of 37 tiered claims stayed
-  asserted; most were accepted limits ("one relay host") or invariants about absence ("no runtime
-  dependencies"), and some are enforced by JSON files that can't hold a comment. **Proposal:** make
-  `LIM` tierless like `DEC`; a `files:` metadata key for files that can't carry markers. In
-  `SPEC.md` §13.
-- **[markers] Markers in published packages point into a private graph.** GameRelay's SDK is
-  mirrored to a public repo with markers referencing private nodes. **Proposal:** a strip-on-export
-  step, or a node folder that ships with the package (now possible with `nodes:`). In `SPEC.md` §13.
+- **[freshness] Most "asserted" claims couldn't be anchored.** Triaged into v0.3: only invariants
+  have a tier (freshness#DEC-8) and `files:` anchors claims in files that can't hold a comment
+  (freshness#DEC-6). Read with the v0.3 tool, GameRelay's graph goes from 15 asserted of 37 tiered
+  claims to 5 of 21 invariants, and each of those 5 is a real gap.
+- **[markers] Markers in published packages point into a private graph.** Triaged into v0.3:
+  public node folders (lore#DEC-3).
 - **[tooling] Ship L2 lint first.** The trial's 200-line checker caught the YAML errors and
   misplaced `Rejected:` lines; nobody keeps 68 claims valid by eye. Matches layers#PLAN-1.
 - **[process] Narrative docs and nodes overlap.** GameRelay keeps decisions as dated prose in
