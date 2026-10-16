@@ -1,11 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { checkAll, type Verdict } from './check';
 import { loadGraph } from './graph';
 import { diffFor, selectClaims } from './select';
 import type { Severity } from './types';
-import { git, normalizeRef } from './util';
+import { normalizeRef } from './util';
+import { withWorktree } from './worktree';
 
 /**
  * `lore bench`: how far to trust the loop on a real repository (freshness#NOTE-1). Each case edits
@@ -121,60 +121,36 @@ function outcomeOf(expect: BenchCase['expect'], verdict: Verdict): CaseResult['o
   return verdict === 'broken' ? 'alarm' : 'ok';
 }
 
-/** Worktrees in use, removed if the run is interrupted, so a stopped benchmark leaves nothing behind (cli#INV-4). */
-const active = new Map<string, string>();
-let trapped = false;
-function trapSignals(): void {
-  if (trapped) return;
-  trapped = true;
-  for (const sig of ['SIGINT', 'SIGTERM'] as const) {
-    process.once(sig, () => {
-      for (const [dir, root] of active) {
-        git(root, ['worktree', 'remove', '--force', dir], true);
-        rmSync(dir, { recursive: true, force: true });
-      }
-      process.exit(130);
-    });
-  }
-}
-
 async function runCase(root: string, c: BenchCase, opts: BenchOptions, hide: string[]): Promise<CaseResult> {
   const base: CaseResult = { id: c.id, ref: normalizeRef(c.ref), expect: c.expect, selected: null, others: [], edits: !!c.edits?.length, outcome: 'unchecked' };
-  const dir = mkdtempSync(join(tmpdir(), 'lore-bench-'));
-  rmSync(dir, { recursive: true, force: true });
-  git(root, ['worktree', 'add', '--detach', '--quiet', dir, opts.rev ?? 'HEAD']);
-  active.set(dir, root);
   try {
-    applyEdits(dir, c.edits ?? []);
-    const graph = loadGraph(dir);
-    if (!graph.claims.has(base.ref)) throw new Error(`no claim ${c.ref}`);
-    const picked = selectClaims(graph, diffFor(dir, 'HEAD'), { covers: false });
-    base.selected = picked.find((r) => normalizeRef(r.ref) === base.ref)?.severity ?? null;
-    base.others = picked.filter((r) => normalizeRef(r.ref) !== base.ref && r.severity !== 'low').map((r) => r.ref);
-    if (!opts.agent) return base;
-    // Selection saw the edits; now take away anything that would give the answer away.
-    for (const h of hide) rmSync(join(dir, h), { recursive: true, force: true });
-    const started = Date.now();
-    const [checked] = await checkAll(loadGraph(dir), [{ ref: base.ref }], { agent: opts.agent, timeoutMs: opts.timeoutMs, jobs: 1 });
-    base.seconds = Math.round((Date.now() - started) / 100) / 10;
-    base.answer = checked!.answer;
-    if (checked!.failed) return { ...base, outcome: 'error', error: `agent failed: ${(checked!.answer ?? '').split('\n').pop()!.slice(0, 200)}` };
-    base.verdict = checked!.verdict!;
-    base.outcome = outcomeOf(c.expect, base.verdict);
-    return base;
+    return await withWorktree(root, opts.rev, async (dir) => {
+      applyEdits(dir, c.edits ?? []);
+      const graph = loadGraph(dir);
+      if (!graph.claims.has(base.ref)) throw new Error(`no claim ${c.ref}`);
+      const picked = selectClaims(graph, diffFor(dir, 'HEAD'), { covers: false });
+      base.selected = picked.find((r) => normalizeRef(r.ref) === base.ref)?.severity ?? null;
+      base.others = picked.filter((r) => normalizeRef(r.ref) !== base.ref && r.severity !== 'low').map((r) => r.ref);
+      if (!opts.agent) return base;
+      // Selection saw the edits; now take away anything that would give the answer away.
+      for (const h of hide) rmSync(join(dir, h), { recursive: true, force: true });
+      const started = Date.now();
+      const [checked] = await checkAll(loadGraph(dir), [{ ref: base.ref }], { agent: opts.agent, timeoutMs: opts.timeoutMs, jobs: 1 });
+      base.seconds = Math.round((Date.now() - started) / 100) / 10;
+      base.answer = checked!.answer;
+      if (checked!.failed) return { ...base, outcome: 'error' as const, error: `agent failed: ${(checked!.answer ?? '').split('\n').pop()!.slice(0, 200)}` };
+      base.verdict = checked!.verdict!;
+      base.outcome = outcomeOf(c.expect, base.verdict);
+      return base;
+    });
   } catch (err) {
     return { ...base, outcome: 'error', error: (err as Error).message };
-  } finally {
-    git(root, ['worktree', 'remove', '--force', dir], true);
-    rmSync(dir, { recursive: true, force: true });
-    active.delete(dir);
   }
 }
 
 /** Run every case, `jobs` at a time, results in case order. */
 export async function bench(root: string, casesPath: string, opts: BenchOptions = {}): Promise<{ results: CaseResult[]; summary: BenchSummary }> {
   const file = readBench(casesPath);
-  trapSignals();
   const rel = relative(resolve(root), resolve(casesPath));
   const inside = !rel.startsWith('..') && !rel.startsWith('/');
   const hide = [...(file.hide ?? []), ...(opts.hide ?? []), ...(inside ? [rel] : [])];

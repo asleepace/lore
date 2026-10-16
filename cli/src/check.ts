@@ -26,7 +26,7 @@ const KIND_WORDS: Record<Claim['kind'], string> = {
   NOTE: 'a note: known behavior the code has',
 };
 
-function snippet(root: string, file: string, from: number, to: number): string | null {
+export function snippet(root: string, file: string, from: number, to: number): string | null {
   const abs = join(root, file);
   if (!existsSync(abs)) return null;
   const lines = readFileSync(abs, 'utf8').split('\n');

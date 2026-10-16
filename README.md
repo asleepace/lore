@@ -28,13 +28,13 @@ by one constraint: it must cost almost nothing to keep.
 - **Derive, don't declare.** Authors write claims and markers. Edges, staleness and history are derived from them, from references in prose, and from git.
 - **Zoom.** Every layer opens with a summary of the next, so a graph renders at any depth: a few hundred words to orient a whole repository, full text only for what a change might break.
 - **Reviews check the code.** A change selects the claims it reaches; an agent checks every invariant (all of them, when there are few enough) against the new code; only mismatches reach a person.
-- **Trust is measured.** A benchmark breaks claims on purpose and counts how often checks miss.
+- **Trust is measured.** A benchmark breaks claims on purpose and counts how often checks miss; `infer` finds claims an agent would have stated from the code alone, which restate it.
 
 ## Tools
 
 [`cli/`](cli/) is `lore`: `digest`, `show`, `trace` and `find` for planning; `review` for reviewing
 a change; the loop's steps on their own (`select`, `ask`, `check`, `gate`, `record`, `history`,
-`lint`); and `bench` for measuring trust. The same are MCP tools for agents (`lore mcp`), and a
+`lint`); and `bench` and `infer` for measuring trust. The same are MCP tools for agents (`lore mcp`), and a
 GitHub Action ([`action.yml`](action.yml)) runs on pull requests.
 
 ## Progressive enhancement

@@ -112,6 +112,14 @@ Rejected: a review that only checks selected claims, which caught 17 of 27 bench
 
 - depends: layers#DEC-7
 
+### DEC-12
+`lore infer` measures inferability in two steps: a blind answer from a claim's anchored code, in a worktree without the graph, then a graded comparison with the claim.
+
+Asking a claim's own question without the graph hands the agent the claim; "yes, it holds" would measure verifiability, which the check already does. So the blind step gets only the location (the marked code, else `files:`, `tests:`, the node's `covers`, else its title) and a question for the claim's kind, in a worktree where `LORE.md`, the node folders and every marker are gone, with line numbers kept so snippets match. `--code-only` deletes all markdown too. A second call grades the answer against the full claim; for a decision, "inferred" needs the reason or what was rejected, not just the choice. Verdicts vary between runs (two GameRelay runs agreed on 53 of 68), so `--runs n` counts a claim as inferred only if every run infers it.
+Rejected: the claim's own question without the graph, which leaks the answer. Rejected: string similarity between the answer and the claim, which can't tell a paraphrase from a different rule. Rejected: grading in the blind call, which lets the agent see the claim.
+
+- depends: freshness#DEC-10
+
 ## Notes
 
 ### NOTE-1
@@ -142,6 +150,15 @@ The prompt that missed breaks trusted tests and names over code: `host.endsWith(
 
 - depends: freshness#NOTE-1, cli#DEC-10
 
+### NOTE-6
+On GameRelay, 8 of 68 claims were inferred from the code alone in both of two runs, and 34 were missed in both: those are what the graph adds.
+
+The 8 are four invariants (still worth keeping as guardrails) and four decisions whose reason a code comment already states. The 34 are mostly notes and decisions about how parts meet, located only by their node's area: no single file says them. In the code-only run, pointed at exact code, an agent named about half the claims there unprompted (11 of 23); pointed at an area, 3 of 37. A missed claim isn't always unknowable: shown `Room`'s imports, the agent didn't think to say `Room` must import nothing but the protocol, which is the point; the graph says which of the true things matter. Each run took about four minutes, eight claims at a time.
+
+On this repository (one run, `SPEC.md` left in place as the "code"), 8 of 13 invariants were inferred, since they restate the spec's MUST rules, but only 4 of 52 decisions, with 23 partial: the choice is visible in the spec, the reason and what was rejected live only here.
+
+- depends: cli#DEC-12
+
 ## Pipelines
 
 ```sh
@@ -164,6 +181,7 @@ lore history room#INV-2                              # every commit that touched
 
 # Trust
 lore bench lore/bench.json --agent "$AGENT"          # recall, noise, false confirmations, false alarms
+lore infer --code-only --runs 2 --agent "$AGENT"     # claims an agent states from the code alone: they restate it
 ```
 
 ## Agents
@@ -180,7 +198,6 @@ the code and add the trailer.
 
 ## Next
 
-- **Inferability** in `bench`: ask each claim's question with the code and without the graph; claims answered right restate the code (`SPEC.md` §10).
 - **A task run**: the same GameRelay feature task with and without the graph, counting invariants broken.
 - **Cases someone else writes**, so the benchmark isn't graded by the model that wrote it.
 - **Decision checks** in `bench`, before `review` checks decisions ([freshness#DEC-11](freshness.md#dec-11)).

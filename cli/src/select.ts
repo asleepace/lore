@@ -54,7 +54,8 @@ export function parseDiff(text: string): Diff {
       for (const r of refsIn(line)) (addedRefs.get(key) ?? addedRefs.set(key, new Set()).get(key)!).add(r);
     } else if (line.startsWith('-') && !line.startsWith('---')) {
       for (const r of refsIn(line)) (removedRefs.get(key) ?? removedRefs.set(key, new Set()).get(key)!).add(r);
-      const h = /^-### ([A-Z]+-\d+)\s*$/.exec(line);
+      // Text after the ID is allowed (L012 only warns), so a heading with a title counts too.
+      const h = /^-###\s+([A-Z]+-\d+)\b/.exec(line);
       if (h) (removedHeadings.get(oldFile ?? key) ?? removedHeadings.set(oldFile ?? key, new Set()).get(oldFile ?? key)!).add(h[1]!);
     }
   }

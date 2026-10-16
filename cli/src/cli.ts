@@ -12,6 +12,7 @@ import { resolve as resolvePath } from 'node:path';
 import { ask } from './ask';
 import { bench, type BenchSummary, type CaseResult } from './bench';
 import { review, reviewContext, reviewText } from './review';
+import { infer, inferText } from './infer';
 import { checkAll, prepare, sweepTargets, type CheckRecord } from './check';
 import { digest } from './digest';
 import { checkGates } from './gate';
@@ -54,12 +55,17 @@ usage: lore [-C <dir>] [--today YYYY-MM-DD] <command> [options] [--json]
         [--no-code]           skip claims that share an anchored file (followed one hop only)
   find [<word>...]          claims matching every filter; records pipe into ask, check, trace
        [--kind INV,DEC,NOTE] [--node <id>] [--file <path|dir|glob>] [--tier tested|anchored|asserted]
-  history <ref>             commits whose message or diff mentions a claim
+  history <ref>...|-        commits whose message or diff mentions a claim
   record verified|ack <ref>...   print the trailer lines for a commit or PR
-  link <ref> [--from <file>]     the markdown link for a reference
+  link <ref>...|- [--from <file>] the markdown link for a reference
   bench <cases.json>        break claims on purpose in throwaway worktrees; measure selection and checks
         [--agent <cmd>] [--jobs n] [--only id,...] [--hide <path>] [--rev <rev>]
                               without an agent, measures selection only; exit 1 on a false confirmation
+  infer [<ref>...|-]        which claims an agent works out from the code alone (blind, then graded):
+        [--agent <cmd>]       those restate the code. Runs in a worktree with the graph deleted
+        [--kind INV,DEC,NOTE] [--code-only] [--runs n] [--jobs n] [--hide <path>] [--rev <rev>]
+                              --runs n: inferred only if every run infers it (verdicts vary run to run)
+                              --code-only also deletes every markdown file; without an agent, the prompts
   mcp                       serve these commands as MCP tools over stdio
 
 Refs are node#PREFIX-n (room#INV-2). --all includes retired and superseded claims (show, trace, find). "-" reads refs or claim records (JSON) from stdin.`;
@@ -73,7 +79,7 @@ interface Args {
 function parseArgs(argv: string[]): Args {
   const flags = new Map<string, string[]>();
   const pos: string[] = [];
-  const takesValue = new Set(['-C', '--depth', '--node', '--files', '--message', '--policy', '--from', '--limit', '--bot', '--agent', '--timeout', '--today', '--kind', '--file', '--tier', '--jobs', '--only', '--hide', '--rev']);
+  const takesValue = new Set(['-C', '--depth', '--node', '--files', '--message', '--policy', '--from', '--limit', '--bot', '--agent', '--timeout', '--today', '--kind', '--file', '--tier', '--jobs', '--only', '--hide', '--rev', '--max', '--runs']);
   let cmd = '';
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -432,6 +438,33 @@ export function main(argv: string[]): number {
       return 0;
     }
 
+    case 'infer': {
+      const agent = args.flags.get('--agent')?.[0] ?? process.env.LORE_AGENT;
+      const refs = args.pos.length ? refsFrom(args.pos).map((r) => r.ref) : undefined;
+      const kinds = args.flags.get('--kind')?.[0]?.split(',').map((k) => k.trim().toUpperCase()) as ('INV' | 'DEC' | 'NOTE')[] | undefined;
+      infer(graph, {
+        refs,
+        kinds,
+        agent,
+        jobs: Number(args.flags.get('--jobs')?.[0] ?? '6'),
+        timeoutMs: Number(args.flags.get('--timeout')?.[0] ?? '240') * 1000,
+        rev: args.flags.get('--rev')?.[0],
+        codeOnly: args.flags.has('--code-only'),
+        hide: args.flags.get('--hide'),
+        runs: Number(args.flags.get('--runs')?.[0] ?? '1'),
+        onResult: (r) => process.stderr.write(`${(r.verdict ?? '-').padEnd(9)} ${r.ref}\n`),
+      })
+        .then(({ results, summary }) => {
+          print(json, { agent: agent ?? null, summary, results }, () => inferText(results, summary, !!agent));
+          process.exit(0);
+        })
+        .catch((err: Error) => {
+          process.stderr.write(`lore: ${err.message}\n`);
+          process.exit(2);
+        });
+      return -1;
+    }
+
     case 'bench': {
       const casesPath = args.pos[0];
       if (!casesPath) return usage('bench <cases.json>');
@@ -458,22 +491,29 @@ export function main(argv: string[]): number {
     }
 
     case 'history': {
-      const ref = args.pos[0];
-      if (!ref) return usage('history <ref>');
-      if (!graph.claims.has(normalizeRef(ref)) && !graph.nodes.has(normalizeRef(ref))) return usage(`no claim or node "${ref}"`);
-      const entries = history(graph, ref, Number(args.flags.get('--limit')?.[0] ?? '50'));
-      print(json, entries, () =>
-        entries.length ? entries.map((e) => `${e.commit.slice(0, 7)} ${e.date} ${e.subject}  [${e.via.join(', ')}]`).join('\n') + '\n' : 'no history\n',
-      );
+      // One ref prints its entries; several, or `-`, print one group per ref.
+      const refs = refsFrom(args.pos).map((r) => r.ref);
+      if (!refs.length) return usage('history <ref>... or history -');
+      const missing = refs.find((r) => !graph.claims.has(normalizeRef(r)) && !graph.nodes.has(normalizeRef(r)));
+      if (missing) return usage(`no claim or node "${missing}"`);
+      const limit = Number(args.flags.get('--limit')?.[0] ?? '50');
+      const groups = refs.map((ref) => ({ ref: normalizeRef(ref), entries: history(graph, ref, limit) }));
+      const lines = (entries: (typeof groups)[number]['entries']) =>
+        entries.length ? entries.map((e) => `${e.commit.slice(0, 7)} ${e.date} ${e.subject}  [${e.via.join(', ')}]`).join('\n') + '\n' : 'no history\n';
+      const single = args.pos.length === 1 && args.pos[0] !== '-';
+      print(json, single ? groups[0]!.entries : groups, () => (single ? lines(groups[0]!.entries) : groups.map((g) => `== ${g.ref}\n${lines(g.entries)}`).join('\n')));
       return 0;
     }
 
     case 'link': {
-      const ref = args.pos[0];
-      if (!ref) return usage('link <ref>');
-      const link = linkFor(graph, ref, args.flags.get('--from')?.[0] ?? 'LORE.md');
-      if (!link) return usage(`no claim or node "${ref}"`);
-      print(json, { ref: normalizeRef(ref), link }, () => `[${normalizeRef(ref)}](${link})\n`);
+      const refs = refsFrom(args.pos).map((r) => r.ref);
+      if (!refs.length) return usage('link <ref>... or link -');
+      const from = args.flags.get('--from')?.[0] ?? 'LORE.md';
+      const links = refs.map((ref) => ({ ref: normalizeRef(ref), link: linkFor(graph, ref, from) }));
+      const missing = links.find((l) => !l.link);
+      if (missing) return usage(`no claim or node "${missing.ref}"`);
+      const single = args.pos.length === 1 && args.pos[0] !== '-';
+      print(json, single ? links[0] : links, () => links.map((l) => `[${l.ref}](${l.link})`).join('\n') + '\n');
       return 0;
     }
 

@@ -115,6 +115,13 @@ describe('gates', () => {
     repo.commit('Retire a note');
     r = checkGates(loadGraph(repo.dir), { range: 'HEAD~1..HEAD' });
     expect(r.results).toEqual([]);
+    // A heading with a title after the ID (allowed, with a warning) is caught when deleted too.
+    repo.write('docs/room.md', BASE['docs/room.md']!.replace('### NOTE-1\n', '### NOTE-1 State limit\n'));
+    repo.commit('Title a note');
+    repo.write('docs/room.md', BASE['docs/room.md']!.replace('### NOTE-1\nThe state limit counts characters, not bytes.\n\n- ask: Does the state limit count bytes?\n', ''));
+    repo.commit('Drop the titled note');
+    r = checkGates(loadGraph(repo.dir), { range: 'HEAD~1..HEAD' });
+    expect(r.results.map((x) => [x.ref, x.status])).toEqual([['room#NOTE-1', 'unmet']]);
   });
 
   test("a bot's own commits never trigger a gate", () => {
@@ -209,6 +216,14 @@ describe('the CLI composes', () => {
       const r = lore(repo.dir, [...args, '--json']);
       expect(() => JSON.parse(r.out)).not.toThrow();
     }
+    // Every command that takes claims reads them from stdin given `-`, one group per claim.
+    for (const cmd of ['ask', 'show', 'trace', 'history', 'link', 'record verified']) {
+      const r = lore(repo.dir, [...cmd.split(' '), '-', '--json'], sel.out);
+      expect([cmd, r.code]).toEqual([cmd, 0]);
+      expect(r.out).toContain('room#INV-1');
+    }
+    const links = JSON.parse(lore(repo.dir, ['link', '-', '--json'], 'room#INV-1\nhost#INV-1\n').out) as { ref: string; link: string }[];
+    expect(links).toEqual([{ ref: 'room#INV-1', link: 'docs/room.md#inv-1' }, { ref: 'host#INV-1', link: 'docs/host.md#inv-1' }]);
   });
 
   test('plain ref lists on stdin work too, and record prints trailers', () => {

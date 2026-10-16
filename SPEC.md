@@ -350,7 +350,16 @@ It reports:
 | **Selection noise** | How many other claims did each edit reach? | §5.3 heuristics |
 | **False confirmations** | How often did a check say "holds" about a broken claim? | The check prompt; the one number that lets a break land |
 | **False alarms** | How often did it say "broken" about a claim that holds? | Usually the claim's wording (§4.1) |
-| **Inferability** | Which claims does an agent answer correctly from the code alone, without the graph? | Principle 1: those restate the code |
+| **Inferability** | Which claims would an agent state unprompted, from the code where they're anchored, without the graph? | Principle 1: those restate the code |
+
+**Inferability** is measured blind, then graded: in a copy of the repository with the graph
+deleted and markers stripped, an agent is shown where a claim is anchored and asked a question for
+its kind ("what must this code always preserve?", "what choice does it reflect, and what was
+rejected?", "what would surprise someone?"), never the claim's own question, which would give the
+answer away. A second step compares that answer with the claim: inferred, partial or missed. It
+measures whether an agent would know the claim, not whether it could verify it; that is the check.
+An inferred invariant still guards the code (intention 2); an inferred decision or note restates
+it. Single verdicts vary between runs, so act on claims inferred in every run. <!-- @lore cli#DEC-12 -->
 
 The outcome test is a task run: give an agent the same feature task with and without the graph,
 and count the invariants it breaks.
@@ -441,7 +450,7 @@ Tools MUST read v0.1 to v0.3 graphs:
 
 - **Independent cases.** Checks gave no false confirmations in 53 checks of broken claims on GameRelay (§10), but the same model wrote the breaks. How do checks do on cases a person writes?
 - **Decision checks.** Does the decision template (§8) find real drift, or only noise?
-- **Inferability in practice.** How many claims in a real graph restate the code, and should lint flag them?
+- **Inferable decisions.** On GameRelay, 4 of 26 decisions were inferred from the code in both of two runs, because a code comment already gave the reason. Should a decision whose reason lives in a comment leave the graph, or stay as the one place that names what was rejected?
 - **Goodhart.** Will authors write claims that are easy to verify rather than important? Inferability is one guard.
 - **Ignored paths.** Test fixtures and generated code hold example markers. A root `ignore:` list, or nothing until a second repository needs it?
 - **Cross-repo references.** Should another repository be able to reference a public folder's claims?

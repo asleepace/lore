@@ -50,6 +50,10 @@ describe('review', () => {
       const r = reviewContext(g, { range: 'HEAD', ...opts });
       expect([r.scope, r.items.map((i) => i.ref)]).toEqual(['selected', ['room#INV-1', 'room#DEC-1']]);
     }
+    for (const flags of [['--max', '2'], ['--selected']]) {
+      const cli = JSON.parse(lore(repo.dir, ['review', 'HEAD', ...flags, '--json']).out) as { scope: string; range: string };
+      expect([cli.scope, cli.range]).toEqual(['selected', 'HEAD']);
+    }
   });
 
   test('with an agent: a verdict per checked claim, a trailer for those that hold, exit 1 on a break', async () => {

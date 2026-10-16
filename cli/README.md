@@ -19,13 +19,14 @@ bun src/bin.ts -C .. lint             # or: bun run build && node dist/lore.js -
 | `ask <ref>…\|-` | The question each claim poses | 0 |
 | `check [range\|ref…\|-] [--agent cmd] [--jobs n] [--sweep]` | Check claims against the code with any model command; without one, print the prompts | 1 if any broken |
 | `gate [range] [--message pr.md] [--policy …]` | Are reached invariants updated, acknowledged or verified? | 1 if unmet under `block` |
-| `history <ref>` | Commits whose message or diff mentions a claim | 0 |
+| `history <ref>…\|-` | Commits whose message or diff mentions a claim | 0 |
 | `record verified\|ack <ref>…` | The trailer line to add to a commit or PR | 0 |
 | `show <ref\|node>…` | One claim with its code and every edge, or a node with its claims, without reading the file | 0 |
 | `trace <ref\|node\|path>…\|- [--up\|--both] [--depth n]` | What rests on a claim, node or file, hop by hop, as a table | 0 |
 | `find [word…] [--kind] [--node] [--file] [--tier]` | Claims matching every filter, as records the other commands take | 0 |
 | `bench <cases.json> [--agent cmd] [--jobs n]` | Break claims on purpose in throwaway worktrees; score selection (recall and noise) and checks | 1 on a false confirmation |
-| `link <ref> [--from file]` | The markdown link for a reference | 0 |
+| `infer [ref…] [--agent cmd] [--code-only] [--runs n]` | Which claims an agent states from the code alone, blind then graded: those restate the code | 0 |
+| `link <ref>…\|- [--from file]` | The markdown link for a reference | 0 |
 | `graph` | The whole graph as JSON | 0 |
 | `mcp` | Serve these as MCP tools over stdio | runs until stdin closes |
 
@@ -118,6 +119,25 @@ selection reached the claim and what the check said, and reports false confirmat
 a broken claim), false alarms, unsure answers, and selection noise (other claims each edit reached,
 since recall alone would reward selecting everything). The cases file and `hide` paths are deleted from
 each worktree first, so the agent can't read the answers. Without an agent it scores selection only.
+
+## Measuring: infer
+
+`lore infer --code-only --runs 2 --agent "$AGENT"` asks, for each claim: would an agent that never
+saw the graph say this anyway? In a worktree with the graph deleted, markers stripped (and with
+`--code-only`, every markdown file gone), the agent is shown the code where the claim is anchored
+and asked a question for its kind, never the claim itself. A second call grades its answer against
+the claim: inferred, partial or missed. With `--runs 2`, inferred means inferred both times.
+
+```
+8 of 68 claims inferred from the code alone; 19 partly.
+INV: 4 inferred, 6 partial, 11 missed (of 21)
+DEC: 4 inferred, 7 partial, 15 missed (of 26)
+NOTE: 0 inferred, 6 partial, 15 missed (of 21)
+Restate the code (candidates to cut, or to rewrite with the why): room#INV-3, host-health#DEC-2, …
+```
+
+An inferred invariant still guards the code; an inferred decision or note only repeats it. Missed
+claims are what the graph adds.
 
 ## For agents: MCP
 
