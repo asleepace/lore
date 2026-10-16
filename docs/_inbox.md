@@ -2,6 +2,23 @@
 
 Unsorted findings waiting to be triaged into claims or spec changes. Not a node (see `SPEC.md` §9).
 
+## Building the CLI (2026-10-16)
+
+- **[markers] Test fixtures hold example markers.** The CLI's own tests write markers into
+  throwaway repos, and `lore lint` on this repo read them as real anchors (17 errors). Fixed by
+  assembling them from pieces. Every tool that tests Lore will hit this. **Proposal:** a root
+  `ignore:` list of globs where markers aren't read, for fixtures, vendored and generated code;
+  not added yet, since the workaround is one line.
+- **[layers] Adding a test that anchors an invariant fires its gate.** On this branch, new tests
+  with markers reached format#INV-3, freshness#INV-1 and markers#INV-1, so the gate asked for an
+  acknowledgment for anchoring work. Arguably right (an anchor is a claim about code someone should
+  check), arguably noise. **Proposal:** watch it; if it's noise, a marker added on a `+` line could
+  count as `medium` rather than reaching the gate.
+- **[format] Versions must stay strings.** `lore: 0.10` read as a number is `0.1`. The CLI's parser
+  only turns integers into numbers; the spec's subset should say versions are strings.
+- **[freshness] The map gives reading order.** A first digest sorted nodes by ID; DEC-13 says the
+  map is the reading order, so digests follow it.
+
 ## v0.3 tool run (2026-10-16)
 
 A throwaway v0.3 tool (lint, digest, select) run on both graphs:

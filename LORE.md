@@ -17,6 +17,25 @@ This repository defines Lore and documents itself with it. `SPEC.md` is the sour
 - [markers](docs/markers.md): how code (or any file) points at claims.
 - [freshness](docs/freshness.md): trust tiers, staleness and verification.
 - [layers](docs/layers.md): progressive enhancement from plain markdown to agents, the verification loop, and how the protocol is versioned.
+  - [cli](docs/cli.md): `lore`, small composable commands for each step of the loop.
+
+## Goals
+
+The spec is judged against these (`SPEC.md` §1, and DEC-5):
+
+- **Zoom**: the graph reads at any depth, because every layer opens with a summary of the next.
+- **Action semantics**: a claim's kind tells an agent what to do: a guardrail, a prior or context.
+- **Gates**: a change to code that upholds an invariant can't land silently.
+- **History**: anything that mentions a claim joins its history; nothing is declared.
+- **Self-evaluation**: every claim is a question with a known answer.
+- **Contract**: a package's public claims ship with it.
+- **Blast radius**: claims say what they rest on.
+
+Together they make the **verification loop**: a change selects the claims it might break, each is
+checked against the new code, and people see only the mismatches. Two effects follow: the score at
+each depth says how much context an agent needs, and claims that keep being acknowledged mark where
+the code fights its own design. The [cli](docs/cli.md) is the loop as small commands an agent or a
+CI job can call one at a time, which is how the graph keeps itself current.
 
 ## Trials
 
@@ -56,6 +75,12 @@ The core stays closed: three claim kinds and no declared extensions, until two t
 
 v0.3 compared a minimal closed format with a core plus declared profiles. The closed one keeps every graph readable by every agent and tool without learning a dialect; the profile version's two pieces the goals needed (`depends:`, public folders) were taken on their own.
 Rejected: profiles and declared claim types now, which buy flexibility no trial has asked for at the cost of dialects.
+
+### DEC-5
+The spec states its goals and the verification loop before any rule, and every feature is judged against them.
+
+v0.1 and v0.2 grew by adding what each trial asked for, which is how specs bloat. v0.3 started from the properties the format should give for free and kept only what serves them; the rest went (scope, links, plans as claims). Stating the goals first makes the next "should we add X?" answerable.
+Rejected: a feature list without goals, which can only grow.
 
 ## Limits
 
