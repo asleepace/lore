@@ -78,6 +78,20 @@ describe('gates', () => {
     expect(r.results.map((x) => [x.ref, x.status])).toEqual([['room#INV-1', 'updated']]);
   });
 
+  test('deleting a claim heading is an unmet gate whatever the trailers say; retiring it is fine', () => {
+    // @lore format#INV-2
+    repo = makeRepo(BASE);
+    repo.write('docs/room.md', BASE['docs/room.md']!.replace('### NOTE-1\nThe state limit counts characters, not bytes.\n\n- ask: Does the state limit count bytes?\n', ''));
+    repo.commit('Drop a note\n\nLore-Ack: room#NOTE-1');
+    let r = checkGates(loadGraph(repo.dir), { range: 'HEAD~1..HEAD' });
+    expect(r.results.map((x) => [x.ref, x.status])).toEqual([['room#NOTE-1', 'unmet']]);
+    repo.git('reset', '-q', '--hard', 'HEAD~1');
+    repo.write('docs/room.md', BASE['docs/room.md']!.replace('- ask: Does the state limit count bytes?', '- ask: Does the state limit count bytes?\n- status: retired'));
+    repo.commit('Retire a note');
+    r = checkGates(loadGraph(repo.dir), { range: 'HEAD~1..HEAD' });
+    expect(r.results).toEqual([]);
+  });
+
   test("a bot's own commits never trigger a gate", () => {
     // @lore layers#QRK-1
     repo = makeRepo(BASE);
@@ -185,6 +199,15 @@ describe('the CLI composes', () => {
     expect(lore(repo.dir, ['lint']).code).toBe(1);
     expect(lore(repo.dir, ['nope']).code).toBe(2);
     expect(lore(repo.dir, ['digest', '--depth', '7']).code).toBe(2);
+  });
+
+  test('the review date is an input: the same repository and date always lint the same', () => {
+    // @lore cli#INV-3
+    repo = makeRepo({ ...BASE, 'docs/host.md': BASE['docs/host.md']! + '- review_after: 2026-12-01\n' });
+    expect(lore(repo.dir, ['--today', '2026-11-30', 'lint']).out).not.toContain('L008');
+    expect(lore(repo.dir, ['--today', '2026-12-02', 'lint']).out).toContain('L008 host#INV-1');
+    const env = { ...process.env, LORE_TODAY: '2026-12-02' };
+    expect(spawnSync('bun', [BIN, '-C', repo.dir, 'lint'], { encoding: 'utf8', env }).stdout).toContain('L008');
   });
 
   test('select, lint, digest and gate need no model and give the same answer every run', () => {

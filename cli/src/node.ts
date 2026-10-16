@@ -12,6 +12,7 @@ export const SECTIONS: Record<string, { prefix: string; kind: Kind }> = {
   Plans: { prefix: 'PLAN', kind: 'NOTE' },
 };
 const KIND_OF: Record<string, Kind> = Object.fromEntries(Object.values(SECTIONS).map((s) => [s.prefix, s.kind]));
+export const kindOf = (prefix: string): Kind => KIND_OF[prefix] ?? 'NOTE';
 const META = /^- ([a-z_]+): (.+)$/;
 
 export function parseNode(text: string, id: string, path: string, folder: string, issues: Issue[]): LoreNode {

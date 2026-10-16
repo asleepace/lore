@@ -1,5 +1,6 @@
 import type { ClaimRecord, Graph } from './types';
 import { diffFor, selectClaims, type Diff } from './select';
+import { kindOf } from './node';
 import { git, normalizeRef } from './util';
 
 export interface GateResult extends ClaimRecord {
@@ -39,7 +40,8 @@ export function trailers(text: string): { ack: Set<string>; verified: Set<string
 export function checkGates(graph: Graph, opts: GateOptions): { results: GateResult[]; skipped?: string } {
   let messages = opts.message ?? '';
   if (opts.range?.includes('..')) {
-    const log = git(graph.root, ['log', '--format=%an%x1f%B%x1e', opts.range]);
+    // `base...head` diffs from the merge base; for the log that's `base..head` (not the symmetric difference).
+    const log = git(graph.root, ['log', '--format=%an%x1f%B%x1e', opts.range.replace('...', '..')]);
     const commits = log.split('\x1e').map((c) => c.trim()).filter(Boolean).map((c) => {
       const [author = '', body = ''] = c.split('\x1f');
       return { author, body };
@@ -62,5 +64,23 @@ export function checkGates(graph: Graph, opts: GateOptions): { results: GateResu
     const status = touched ? 'updated' : verified.has(key) ? 'verified' : ack.has(key) ? 'acknowledged' : 'unmet';
     return { ...r, status };
   });
+  // Claims are never deleted, so their numbers are never reused (format#INV-2): a removed heading
+  // whose ID is gone from the node is unmet whatever trailers say. Retire claims with `status`.
+  // @lore format#INV-2
+  for (const [file, ids] of diff.removedHeadings) {
+    const node = [...graph.nodes.values()].find((n) => n.path === file);
+    const nodeId = node?.id ?? file.replace(/^.*\//, '').replace(/\.md$/, '');
+    for (const id of ids) {
+      if (node?.claims.some((c) => c.id === id)) continue; // moved or reworded, still there
+      results.push({
+        ref: `${nodeId}#${id}`,
+        kind: kindOf(id.split('-')[0]!),
+        statement: '(deleted)',
+        severity: 'high',
+        reasons: ['claim heading deleted: retire it with `- status: retired` instead, so its number is never reused'],
+        status: 'unmet',
+      });
+    }
+  }
   return { results };
 }

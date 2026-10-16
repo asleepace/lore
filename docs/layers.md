@@ -47,9 +47,9 @@ Repositories, CLIs, CI actions and agents all read the same files at different t
 Rejected: `spec: lore/0.1` as a label with no compatibility rules (v0.1). Rejected: no version at all, which turns every format change into a silent break for someone.
 
 ### DEC-4
-The verification loop selects and records deterministically (L3) and asks and checks with a model (L4).
+The verification loop selects, asks and records deterministically (L3); only the check uses a model (L4).
 
-Selection is what keeps a model's cost proportional to what a change touches (DEC-2), and the record lives in git as trailers. So a repository with no model still gets the useful half (which claims a PR touches, and gates), and one with a model gets claims re-verified on every change. That is the second-order property v0.3 is built for: documentation that tests itself, with people seeing only the mismatches.
+Asking is deterministic too, since [cli#DEC-5](cli.md#dec-5) found a question has to be fixed for two runs of the loop to mean the same thing. Selection is what keeps a model's cost proportional to what a change touches (DEC-2), and the record lives in git as trailers. So a repository with no model still gets the useful half (which claims a PR touches, and gates), and one with a model gets claims re-verified on every change. That is the second-order property v0.3 is built for: documentation that tests itself, with people seeing only the mismatches.
 Rejected: a model in selection, which breaks [freshness#INV-1](freshness.md#inv-1) and makes every PR cost something. Rejected: no model step at all, which leaves upkeep to discipline, the cost that sank every wiki.
 
 - depends: freshness#INV-1, freshness#DEC-5

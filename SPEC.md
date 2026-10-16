@@ -266,17 +266,18 @@ might break. <!-- @lore layers#DEC-5 -->
 ## 8. The verification loop
 
 1. **Select.** For a diff, staleness detection (§5.3) lists the affected claims. Deterministic.
-2. **Ask.** Each affected claim becomes a question: its `ask:`, or one derived from its first paragraph ("Only the host can set room state" → "Can a player who isn't host set room state?").
-3. **Check.** An agent answers the question from the changed code, with a digest for context, and compares the answer with the claim.
+2. **Ask.** Each affected claim becomes a question: its `ask:`, or one built from its first paragraph by a fixed template per kind. The question says where to look; it is deterministic, so two runs ask the same thing.
+3. **Check.** An agent reads the claim, its question and the code that upholds it, and gives a verdict: **holds**, **broken** or **unsure**. The verdict is always about the claim, never about the wording of the question.
 4. **Record.**
    - **Agreement:** the claim is **verified** at that commit, recorded as a `Lore-Verified: ref` trailer on the commit or a line in the PR. Git holds the evidence, not the docs. A claim's freshness is measured from its latest verification, or its node's `verified` date, whichever is later. <!-- @lore freshness#DEC-5 -->
    - **Disagreement:** the gate fires (§9).
 
-Steps 1 and 4 are L3; steps 2 and 3 need a model and are L4, so a repository without one still gets
-selection and gates. <!-- @lore layers#DEC-4 -->
+Steps 1, 2 and 4 are deterministic (L3); only step 3 needs a model (L4), so a repository without one
+still gets selection, questions and gates. <!-- @lore layers#DEC-4 -->
 
 - **A check never raises a tier.** It refreshes freshness only: an agent can confirm a false claim, so only tests make a claim "tested". <!-- @lore freshness#NOTE-1 -->
 - **Self-evaluation.** The same questions, asked without a diff, form a benchmark of how well an agent understands the repository at each depth. Its score at depth 1, 2 and 3 says how much context the repository needs, and is a health signal worth tracking over time.
+- **Sweep.** Selection only sees marker regions, so a change to code a claim relies on elsewhere (a constant defined far from the check that uses it) reaches nothing. An L4 tool SHOULD also check every active invariant on a schedule, whatever changed. Marking definitions as well as checks narrows the gap. <!-- @lore freshness#NOTE-2 -->
 - **Pressure.** A claim that is acknowledged or fails checks often marks a place where the code fights its own design. Tools SHOULD report the claims with the most acknowledgments.
 
 ## 9. Gates
@@ -287,6 +288,9 @@ When a change intersects the marker region of an active `INV` (or removes its ma
 - update the claim (its text, metadata or `status`) in the same change;
 - carry `Lore-Ack: ref` (a commit trailer or a PR line), meaning "I know, and it still holds", optionally with a reason;
 - be verified by the loop (§8).
+
+A change that deletes a claim's heading is always an unmet gate, whatever trailers it carries:
+claims are retired with `status`, never deleted, so their numbers are never reused. <!-- @lore format#INV-2 -->
 
 Under `gate: warn`, an L3 tool reports unmet gates; under `block`, it fails the check; under `off`,
 it does neither. A bot's own commits never trigger a gate. <!-- @lore layers#DEC-6, layers#QRK-1 -->

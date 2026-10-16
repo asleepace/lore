@@ -101,3 +101,10 @@ An agent's check can agree with a claim that is no longer true, so a check refre
 The verification loop's value depends on how often this happens, which nobody has measured yet. Keeping "tested" for real tests means a false confirmation can make a claim look fresh, never better enforced than it is.
 
 - depends: freshness#DEC-5
+
+### NOTE-2
+Selection only sees marker regions, so a change to code a claim relies on elsewhere reaches nothing; a sweep of every invariant covers the gap.
+
+In the GameRelay trial, removing `'__proto__'` from `UNSAFE_KEYS`, defined about 500 lines above the marked check, selected no claim, while a check with Claude, asked directly, found the break. Marking the definition fixed that case; the sweep (`lore check --sweep`) is for the cases nobody marked.
+
+- depends: freshness#INV-1

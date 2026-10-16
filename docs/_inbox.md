@@ -2,6 +2,24 @@
 
 Unsorted findings waiting to be triaged into claims or spec changes. Not a node (see `SPEC.md` §9).
 
+## First real checks (2026-10-16)
+
+`lore check` with Claude (`claude -p --tools Read,Glob,Grep`):
+
+- **GameRelay, 5 of 5 right.** Three invariants held on clean code; an obvious break was reported
+  broken; a subtle one (`'__proto__'` removed from `UNSAFE_KEYS`, ~500 lines from the marked
+  check) was reported broken when asked, though **selection reached nothing**. Selection, not the
+  model, is the weak link: freshness#NOTE-2, the sweep, and a marker on the definition (pushed to
+  asleepace/gamerelay.io#225).
+- **This repo's sweep found a real break.** `lint` compared `review_after` with today's date, so
+  cli#INV-3 ("same output for the same input") didn't hold; the back-to-back test couldn't see it.
+  Fixed: the date is an input (`--today`, `$LORE_TODAY`).
+- **"Unsure" when it should be.** format#INV-2 (numbers never reused) is a rule about authors that
+  code only partly enforces; the check said so instead of agreeing. Gates now refuse deleted claim
+  headings; reuse is still only fully preventable with history.
+- **The spec said asking needs a model.** It doesn't: questions are templates (cli#DEC-5). Fixed in
+  `SPEC.md` §8 and layers#DEC-4, found while wiring `check`.
+
 ## Building the CLI (2026-10-16)
 
 - **[markers] Test fixtures hold example markers.** The CLI's own tests write markers into

@@ -19,6 +19,8 @@ A claim number is never reused, even after the claim is retired.
 
 A reused number would silently re-point old references, commit trailers and code markers at a different claim.
 
+> **agent (Claude, `lore check --sweep`), 2026-10-16:** Unsure. Gates now refuse a deleted heading (`cli/src/gate.ts`), but only for changes that go through a gate, not under `gate: off` or in a bot's commits, and not a deletion and reuse of the same ID within one change. Fully enforcing it needs history: the highest number ever used per prefix.
+
 ### INV-3
 Every reference resolves to a plain markdown link without tooling.
 

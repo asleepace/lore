@@ -1,11 +1,11 @@
 ---
-covers: [cli/src/**, cli/package.json]
+covers: [cli/src/**, cli/package.json, action.yml]
 verified: 2026-10-16
 ---
 
 # CLI
 
-`lore`, the L2 and L3 tools: small commands that each do one step of the verification loop and compose through JSON, for people and agents alike.
+`lore`, the L2 to L4 tools: small commands that each do one step of the verification loop and compose through JSON, for people and agents alike, also served as MCP tools and run as a GitHub Action.
 
 ## Invariants
 
@@ -63,12 +63,35 @@ Rejected: Bun-only, which strands Node environments. Rejected: Rust or Go first,
 The question is the contract of a check: the claim and the expected answer are fixed, and only the answer comes from a model. A template keeps L3 model-free ([layers#DEC-4](layers.md#dec-4)); an agent may rephrase the question but not change what it asks.
 Rejected: model-written questions, which would make two runs of the loop ask different things.
 
+### DEC-6
+`check` hands each claim's prompt to any command on stdin (`--agent`, or `$LORE_AGENT`) and reads a `VERDICT: holds|broken|unsure` line; without one, it prints the prompts.
+
+The prompt holds the claim, its question and the code that upholds it, with line numbers, so the model needs nothing else; an agent with file access can read further, which is how a check caught a break the shown code didn't contain ([freshness#NOTE-2](freshness.md#note-2)). Any command works (`claude -p`, a script, a local model), so the CLI stays free of model clients. An unclear or missing verdict counts as `unsure`, never as `holds`. Without an agent the prompts are the output, for an agent that is itself the model.
+Rejected: a built-in model client, which is a dependency, an API key to manage and one vendor. Rejected: a free-form answer parsed for meaning, which turns the verdict into a guess.
+
+- depends: freshness#NOTE-1
+
+### DEC-7
+`lore mcp` serves the same functions as MCP tools over stdio, hand-written JSON-RPC with no SDK, and its check tool returns prompts rather than calling a model.
+
+An agent connected to the server can run the whole loop itself: read a digest before editing, select what its change reaches, prepare the checks, answer them, and get the trailer to add. The calling agent is already a model, so a server that called another one would pay twice and hide the reasoning. The protocol needs four methods; an SDK would be the CLI's only dependency (INV-2).
+Rejected: the MCP SDK. Rejected: a check tool that calls a model from inside the server.
+
+### DEC-8
+The GitHub Action runs `lint`, `select` and `gate` on pull requests and writes them to the job summary; the PR description reaches the script through an environment variable.
+
+It needs only `contents: read`, so it runs safely on pull requests from forks. Interpolating `${{ github.event.pull_request.body }}` into a script would let a PR description run commands in CI. The `check` step isn't in the Action yet: it needs a model and a secret, which each repository should opt into.
+Rejected: posting PR comments, which needs a write token, for a first version.
+
 ## Notes
 
 ### NOTE-1
 The check step of the loop isn't a command yet: an agent runs `select`, `ask`, answers the questions itself, then `record`.
 
 - depends: layers#DEC-4
+- status: retired
+
+> **agent (Claude), 2026-10-16:** Retired: `lore check` and the MCP check tool do this now (DEC-6, DEC-7).
 
 ### NOTE-2
 A trailer anywhere in a range satisfies a gate for the whole range, so a `Lore-Ack:` in the first commit of a PR covers changes in its last.
@@ -76,20 +99,40 @@ A trailer anywhere in a range satisfies a gate for the whole range, so a `Lore-A
 ### NOTE-3
 `history` reads git only; PR descriptions and issues that mention a claim aren't seen yet.
 
+### NOTE-4
+The first real checks agreed with the code every time: 5 of 5 on GameRelay, including a break outside the code the prompt showed.
+
+Three invariants on clean code held; an obvious break and a subtle one were both reported broken, with the right lines (Claude through `claude -p --tools Read,Glob,Grep`, about 20 seconds a claim). A sweep of this repository's 12 invariants then found one real break nobody had seen (`lint` read today's date, breaking INV-3; fixed with `--today`) and answered "unsure" where enforcement really is partial ([format#INV-2](format.md#inv-2)). Seventeen checks are still too few to trust the loop; they say the method works and that the agent doesn't simply agree, not how often it's wrong.
+
+- depends: freshness#NOTE-1
+
 ## Pipelines
 
 ```sh
 lore digest --depth 1                                # orient: the map and every node's lead
 lore digest --depth 2 --files src/room/Room.ts       # the claims around a file, before editing it
 lore select main..HEAD --json | lore ask - --json    # what this branch might break, as questions
+lore check main..HEAD --agent "claude -p"            # check what it reaches with a model; exit 1 if broken
+lore check main..HEAD --json --agent "$AGENT" | lore record verified -   # trailers for what holds
+lore check --sweep --agent "$AGENT"                  # every invariant, whatever changed
 lore gate main..HEAD --message pr.md                 # are reached invariants updated, acked or verified?
 lore record verified room#INV-2                      # the trailer to add once a check agrees
 lore history room#INV-2                              # every commit that touched a guarantee
 ```
 
+## Agents
+
+`lore mcp` serves `lore_digest`, `lore_select`, `lore_check_context`, `lore_ask`, `lore_gate`,
+`lore_record`, `lore_history` and `lore_lint`. Its instructions tell a connected agent the loop:
+read the digest before changing code, select what the change reaches, check it, add the trailer.
+
+```json
+{ "mcpServers": { "lore": { "command": "bun", "args": ["/path/to/lore/cli/src/bin.ts", "-C", ".", "mcp"] } } }
+```
+
 ## Next
 
-- A `check` command that hands each question and a digest to a model command (`--agent "claude -p"`) and records agreements, with mismatches left for review.
-- An MCP server exposing the same commands as tools.
-- A GitHub Action running `select` and `gate` on every PR.
+- A false-confirmation benchmark: break claims on purpose across a real repository and count how often a check still says "holds" (freshness#NOTE-1 is the risk; NOTE-4 is five data points).
+- An opt-in `check` step in the Action, with the model command and its secret supplied by the repository.
 - `history` over PR descriptions and issues.
+- A root `ignore:` list for fixtures and generated code (see the inbox).

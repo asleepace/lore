@@ -14,8 +14,16 @@ function list(v: unknown): string[] {
   return [];
 }
 
+export interface LoadOptions {
+  /**
+   * The date `review_after` is compared with (YYYY-MM-DD). An input like any other, so the same
+   * repository and the same date always lint the same (cli#INV-3). Default: `$LORE_TODAY`, else today.
+   */
+  today?: string;
+}
+
 /** Read a whole graph: root, folders, nodes, the map's tree, markers, and the issues found on the way. */
-export function loadGraph(root: string): Graph {
+export function loadGraph(root: string, opts: LoadOptions = {}): Graph {
   const issues: Issue[] = [];
   const rootFile = existsSync(join(root, 'LORE.md')) ? 'LORE.md' : existsSync(join(root, 'APP.md')) ? 'APP.md' : null;
   if (!rootFile) throw new Error(`no LORE.md (or v0.1 APP.md) in ${root}`);
@@ -115,7 +123,7 @@ export function loadGraph(root: string): Graph {
     });
 
   const graph: Graph = { root, version, folders, publicFolders, gate, nodes, claims, markers, issues };
-  checkReferences(graph);
+  checkReferences(graph, opts.today ?? process.env.LORE_TODAY ?? new Date().toISOString().slice(0, 10));
   return graph;
 }
 
@@ -134,7 +142,8 @@ export function linkFor(graph: Graph, ref: string, fromFile: string): string | u
   return claimId ? `${rel}#${claimId.toLowerCase()}` : rel;
 }
 
-function checkReferences(graph: Graph): void {
+// @lore cli#INV-3
+function checkReferences(graph: Graph, today: string): void {
   const { issues } = graph;
   const local = new RegExp(`(?<![#\\w-])((?:${PREFIXES.join('|')})-\\d+)\\b`, 'g');
   for (const node of graph.nodes.values()) {
@@ -163,7 +172,7 @@ function checkReferences(graph: Graph): void {
         issues.push({ code: 'L013', level: 'info', where: c.ref, message: 'decision without a "Rejected:" line' });
       }
       const ra = c.meta.review_after;
-      if (ra && /^\d{4}-\d{2}-\d{2}$/.test(ra) && ra < new Date().toISOString().slice(0, 10)) {
+      if (ra && /^\d{4}-\d{2}-\d{2}$/.test(ra) && ra < today) {
         issues.push({ code: 'L008', level: 'warn', where: c.ref, message: `review_after ${ra} has passed` });
       }
       for (const d of (c.meta.depends ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {

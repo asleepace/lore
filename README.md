@@ -19,6 +19,12 @@ A protocol for the knowledge code can't hold: why it is the way it is, what must
 - **Zoom.** Every layer opens with a summary of the next, so a graph renders at any depth: a page to orient, claim sentences for the area being changed, full text for what a change might break.
 - **The verification loop.** A change selects the claims it might break (deterministically), each becomes a question, an agent checks it against the new code, and only mismatches reach a person. Documentation that tests itself.
 
+## Tools
+
+[`cli/`](cli/) is `lore`: small commands for each step of the loop (`lint`, `digest`, `select`, `ask`,
+`check`, `gate`, `record`, `history`), the same as MCP tools for agents (`lore mcp`), and a GitHub
+Action ([`action.yml`](action.yml)) for pull requests.
+
 ## Progressive enhancement
 
 Every layer is opt-in. If all tooling is deleted, the docs remain valid, useful markdown.

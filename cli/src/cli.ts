@@ -10,9 +10,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { ask } from './ask';
+import { check, sweepTargets, type CheckRecord } from './check';
 import { digest } from './digest';
 import { checkGates } from './gate';
 import { linkFor, loadGraph } from './graph';
+import { serve } from './mcp';
 import { history } from './history';
 import { diffFor, selectClaims } from './select';
 import { tierOf } from './tiers';
@@ -21,7 +23,7 @@ import { normalizeRef } from './util';
 
 const HELP = `lore: small tools over a Lore graph (spec v0.3)
 
-usage: lore [-C <dir>] <command> [options] [--json]
+usage: lore [-C <dir>] [--today YYYY-MM-DD] <command> [options] [--json]
 
   graph                     the whole graph: nodes, claims, markers, tiers
   lint                      check the graph against the spec (exit 1 on errors)
@@ -30,11 +32,17 @@ usage: lore [-C <dir>] <command> [options] [--json]
   select [<range>|--staged] claims a change might break, with severity and reasons
          [--no-covers]        (no range: the work tree against the index)
   ask <ref>...|-            the question each claim poses
+  check [<range>|<ref>...|-] check claims against the code with a model command; exit 1 if any broken
+        [--agent <cmd>]       (or $LORE_AGENT) reads a prompt on stdin, prints "VERDICT: holds|broken|unsure"
+        [--all]               with a range, also check low-severity claims
+        [--sweep]             every active invariant, whatever changed (selection only sees marker regions)
+                              without an agent: print the prompts, for a calling agent to answer
   gate [<range>|--staged]   invariant gates for a change; exit 1 if unmet and gate is block
        [--message <file>] [--policy off|warn|block]
   history <ref>             commits whose message or diff mentions a claim
   record verified|ack <ref>...   print the trailer lines for a commit or PR
   link <ref> [--from <file>]     the markdown link for a reference
+  mcp                       serve these commands as MCP tools over stdio
 
 Refs are node#PREFIX-n (room#INV-2). "-" reads refs or claim records (JSON) from stdin.`;
 
@@ -47,7 +55,7 @@ interface Args {
 function parseArgs(argv: string[]): Args {
   const flags = new Map<string, string[]>();
   const pos: string[] = [];
-  const takesValue = new Set(['-C', '--depth', '--node', '--files', '--message', '--policy', '--from', '--limit', '--bot']);
+  const takesValue = new Set(['-C', '--depth', '--node', '--files', '--message', '--policy', '--from', '--limit', '--bot', '--agent', '--timeout', '--today']);
   let cmd = '';
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -136,15 +144,27 @@ export function main(argv: string[]): number {
   if (args.cmd === 'record') {
     const [what, ...refs] = args.pos;
     if (what !== 'verified' && what !== 'ack') return usage('record verified|ack <ref>...');
-    const list = refsFrom(refs).map((r) => normalizeRef(r.ref));
+    // Records piped from `check` carry a verdict: only claims that hold are verified.
+    const list = refsFrom(refs)
+      .filter((r) => what !== 'verified' || (r as Partial<CheckRecord>).verdict === undefined || (r as Partial<CheckRecord>).verdict === 'holds')
+      .map((r) => normalizeRef(r.ref));
     const line = `Lore-${what === 'ack' ? 'Ack' : 'Verified'}: ${list.join(', ')}`;
+    if (!list.length) {
+      print(json, { trailer: null, refs: [] }, () => '');
+      return refs.length === 1 && refs[0] === '-' ? 0 : 2;
+    }
     print(json, { trailer: line, refs: list }, () => line + '\n');
-    return list.length ? 0 : 2;
+    return 0;
+  }
+
+  if (args.cmd === 'mcp') {
+    serve(root);
+    return -1; // keeps running; the server exits when stdin closes
   }
 
   let graph: Graph;
   try {
-    graph = loadGraph(root);
+    graph = loadGraph(root, { today: args.flags.get('--today')?.[0] });
   } catch (err) {
     process.stderr.write(`lore: ${(err as Error).message}\n`);
     return 2;
@@ -196,6 +216,30 @@ export function main(argv: string[]): number {
       if (missing.length) process.stderr.write(`lore: no claim ${missing.join(', ')}\n`);
       print(json, records, () => records.map((r) => `${r.ref}\n  ${r.question}`).join('\n') + '\n');
       return 0;
+    }
+
+    case 'check': {
+      const isRefs = args.pos.length > 0 && (args.pos[0] === '-' || args.pos.every((p) => p.includes('#') && !p.includes('..')));
+      let wanted: { ref: string }[];
+      if (args.flags.has('--sweep')) wanted = sweepTargets(graph);
+      else if (isRefs) wanted = refsFrom(args.pos);
+      else {
+        const picked = selectClaims(graph, diffFor(root, args.pos[0], args.flags.has('--staged')), { covers: false });
+        wanted = args.flags.has('--all') ? picked : picked.filter((r) => r.severity !== 'low');
+      }
+      const agent = args.flags.get('--agent')?.[0] ?? process.env.LORE_AGENT;
+      const timeoutMs = Number(args.flags.get('--timeout')?.[0] ?? '180') * 1000;
+      const results = check(graph, wanted, { agent, timeoutMs });
+      if (!agent) {
+        print(json, results, () => results.map((r) => `=== ${r.ref}\n${r.prompt}\n`).join('\n') || 'no claims\n');
+        return 0;
+      }
+      print(json, results, () =>
+        results.length
+          ? results.map((r) => `${(r.verdict ?? 'unsure').padEnd(6)} ${r.ref}  ${r.statement}\n         ${(r.answer ?? '').split('\n').slice(1).join(' ').trim().slice(0, 300)}`).join('\n') + '\n'
+          : 'no claims\n',
+      );
+      return results.some((r) => r.verdict === 'broken') ? 1 : 0;
     }
 
     case 'gate': {

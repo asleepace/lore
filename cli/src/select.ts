@@ -8,6 +8,8 @@ export interface Diff {
   removedRefs: Map<string, Set<string>>;
   /** Marker references on added lines, per file (a marker that moved isn't a removal). */
   addedRefs: Map<string, Set<string>>;
+  /** Claim IDs (`INV-2`) whose `### ` heading lines were removed, per file. */
+  removedHeadings: Map<string, Set<string>>;
 }
 
 const MARK = /@lore\s+(?:(?:see|enforces|implements)\s+)?([a-z][a-z0-9-]*#[A-Z]+-\d+(?:\s*,\s*[a-z][a-z0-9-]*#[A-Z]+-\d+)*)/gi;
@@ -17,6 +19,7 @@ export function parseDiff(text: string): Diff {
   const changed = new Map<string, Set<number>>();
   const removedRefs = new Map<string, Set<string>>();
   const addedRefs = new Map<string, Set<string>>();
+  const removedHeadings = new Map<string, Set<string>>();
   let oldFile: string | null = null;
   let file: string | null = null;
   let next = 0;
@@ -48,9 +51,11 @@ export function parseDiff(text: string): Diff {
       for (const r of refsIn(line)) (addedRefs.get(key) ?? addedRefs.set(key, new Set()).get(key)!).add(r);
     } else if (line.startsWith('-') && !line.startsWith('---')) {
       for (const r of refsIn(line)) (removedRefs.get(key) ?? removedRefs.set(key, new Set()).get(key)!).add(r);
+      const h = /^-### ([A-Z]+-\d+)\s*$/.exec(line);
+      if (h) (removedHeadings.get(oldFile ?? key) ?? removedHeadings.set(oldFile ?? key, new Set()).get(oldFile ?? key)!).add(h[1]!);
     }
   }
-  return { changed, removedRefs, addedRefs };
+  return { changed, removedRefs, addedRefs, removedHeadings };
 }
 
 /** `git diff -U0` for a range (`a..b`), a single revision (against the work tree), or staged changes. */
