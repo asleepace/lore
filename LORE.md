@@ -86,7 +86,7 @@ Rejected: a feature list without goals, which can only grow.
 ### DEC-6
 Lore's purpose is three uses (plan, review, context), served by four ranked intentions and bounded by one constraint: it must cost almost nothing to keep.
 
-v0.3's seven goals mixed reasons with mechanisms, and nothing said which won a conflict. Reviewed against what the trials used, zoom, gates, action semantics, blast radius and self-evaluation turned out to be ways of serving three uses; history and contract served none. Ranking settles conflicts: truth outranks cost, so a review checks every invariant when it can afford to ([layers#DEC-7](docs/layers.md#dec-7)), and a digest may drop detail but never shows an unverified claim as verified. Keeping the docs true is a prerequisite, not the product: the product is an agent planning or reviewing with knowledge it couldn't easily get from the code.
+v0.3's seven goals mixed reasons with mechanisms, and nothing said which won a conflict. Reviewed against what the trials used, zoom, gates, action semantics, blast radius and self-evaluation turned out to be ways of serving three uses; history and contract served none. Ranking settles conflicts: truth outranks cost, so a review reads the change against every invariant, not only the marked ones ([layers#DEC-8](docs/layers.md#dec-8)), and a digest may drop detail but never shows an unverified claim as verified. Keeping the docs true is a prerequisite, not the product: the product is an agent planning or reviewing with knowledge it couldn't easily get from the code.
 Rejected: keeping seven flat goals, which can't settle "should we add X?". Rejected: "documentation that tests itself" as the purpose, which optimizes the upkeep loop over what people read.
 
 - depends: lore#DEC-1

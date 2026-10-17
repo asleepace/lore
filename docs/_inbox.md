@@ -3,6 +3,11 @@
 Unsorted findings waiting to be triaged into claims or spec changes. Not a node (`_`-prefixed, see `SPEC.md` §2).
 Triaged findings leave; git keeps them ([lore#DEC-7](../LORE.md#dec-7)).
 
+## Triaged after the A/B run (2026-10-17)
+
+Reviews that don't read the change (layers#DEC-8, cli#DEC-13, cli#NOTE-8); feature-sized bench
+cases (cli#DEC-14).
+
 ## Triaged into v0.4 (2026-10-16)
 
 From the GameRelay benchmark and a review of v0.3 against what the trials used:
@@ -15,18 +20,12 @@ cli#NOTE-5.
 
 ## Still open
 
-- **[freshness] Reviews don't read the change, so they missed every real break in feature work.**
-  The A/B run on GameRelay (asleepace/gamerelay.io#237: 12 agents, 3 feature tasks, with and
-  without the graph) found 6 real invariant breaks and `lore review` caught none. An unreached
-  claim is checked against its marked code, which a new code path leaves intact (room#INV-4 broke
-  in the `chat` handler; the marker is on `send`). The bench's 27 of 27 came from one-line breaks
-  beside marked code, the wrong distribution. **Proposal:** every check gets the diff and the
-  question "does this change break the claim?", and `bench` gets feature-sized cases.
 - **[format] Mechanism-worded claims fail both ways.** room#INV-4 and protocol#INV-1 state
   mechanisms ("the room stamps `from`", "optional fields only"); agents with the graph kept the
   guarantee from the rationale, but the checker and one agent read the words and missed semantic
-  breaks. format#DEC-15 says so; the A/B is the evidence. **Proposal:** a review hint when a
-  claim's rationale states a broader guarantee than its first sentence.
+  breaks. format#DEC-15 says so; the A/B is the evidence. Reviews now read the rationale
+  (cli#DEC-13), and rewording three GameRelay claims made no difference to them (cli#NOTE-8), so
+  wording matters most for agents reading the graph.
 - **[layers] The graph helped where `infer` said it would.** With the graph, 2 real breaks against
   4, both T3 impersonation breaks avoided, both decision reversals disclosed and written back, at
   about 28% more cost per run; every agent with the graph updated the claims it touched, unprompted.

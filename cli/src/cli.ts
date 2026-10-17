@@ -12,6 +12,7 @@ import { resolve as resolvePath } from 'node:path';
 import { ask } from './ask';
 import { bench, type BenchSummary, type CaseResult } from './bench';
 import { review, reviewContext, reviewText } from './review';
+import { benchReview, reviewBenchText } from './benchreview';
 import { infer, inferText } from './infer';
 import { checkAll, prepare, sweepTargets, type CheckRecord } from './check';
 import { digest } from './digest';
@@ -30,9 +31,10 @@ const HELP = `lore: small tools over a Lore graph (spec v0.4)
 usage: lore [-C <dir>] [--today YYYY-MM-DD] <command> [options] [--json]
 
   review [<range>|--staged] what a change could break, and whether it does: reached claims, what rests
-         [--agent <cmd>]      on them, and a verdict on every invariant (all of them up to --max 50)
-         [--jobs n] [--max n] [--selected] [--depth n]
-                              without an agent: the review context, for a calling agent to answer
+         [--agent <cmd>]      on them, and a verdict on each invariant triage flags against the diff
+         [--all|--selected]   --all: check every invariant against the change; --selected: only reached ones
+         [--jobs n] [--depth n]
+                              without an agent: the review context and prompts, for a calling agent
   graph                     the whole graph: nodes, claims, markers, tiers
   lint                      check the graph against the spec (exit 1 on errors)
   digest [--depth 0-3]      render the graph at a depth (default 1)
@@ -62,6 +64,8 @@ usage: lore [-C <dir>] [--today YYYY-MM-DD] <command> [options] [--json]
   bench <cases.json>        break claims on purpose in throwaway worktrees; measure selection and checks
         [--agent <cmd>] [--jobs n] [--only id,...] [--hide <path>] [--rev <rev>]
                               without an agent, measures selection only; exit 1 on a false confirmation
+        [--review [--all|--selected]]  score the whole review per case (cases may be patches with a map of
+                              expected breaks); exit 1 if an expected break is missed
   infer [<ref>...|-]        which claims an agent works out from the code alone (blind, then graded):
         [--agent <cmd>]       those restate the code. Runs in a worktree with the graph deleted
         [--kind INV,DEC,NOTE] [--code-only] [--runs n] [--jobs n] [--hide <path>] [--rev <rev>]
@@ -323,17 +327,13 @@ function run(argv: string[]): number {
     }
 
     case 'review': {
-      const opts = {
-        range: args.pos[0],
-        staged: args.flags.has('--staged'),
-        max: int(args, '--max', 50),
-        selectedOnly: args.flags.has('--selected'),
-        depth: int(args, '--depth', 1),
-      };
+      const scope = args.flags.has('--all') ? 'all' : args.flags.has('--selected') ? 'selected' : undefined;
+      const opts = { range: args.pos[0], staged: args.flags.has('--staged'), scope, depth: int(args, '--depth', 1) } as const;
       const agent = args.flags.get('--agent')?.[0] ?? process.env.LORE_AGENT;
       if (!agent) {
         const ctx = reviewContext(graph, opts);
-        print(json, ctx, () => reviewText(ctx, false));
+        const { diff: _diff, ...rest } = ctx;
+        print(json, rest, () => reviewText(ctx, false));
         return 0;
       }
       review(graph, {
@@ -341,7 +341,7 @@ function run(argv: string[]): number {
         agent,
         jobs: int(args, '--jobs', 6, 1),
         timeoutMs: int(args, '--timeout', 240, 1) * 1000,
-        onResult: (r) => process.stderr.write(`${(r.verdict ?? 'unsure').padEnd(6)} ${r.ref}\n`),
+        onResult: (r) => process.stderr.write(`${(r.verdict ?? 'unsure').padEnd(11)} ${r.ref}\n`),
       })
         .then((r) => {
           print(json, r, () => reviewText(r, true));
@@ -504,6 +504,29 @@ function run(argv: string[]): number {
       const casesPath = args.pos[0];
       if (!casesPath) return usage('bench <cases.json>');
       const agent = args.flags.get('--agent')?.[0] ?? process.env.LORE_AGENT;
+      if (args.flags.has('--review')) {
+        if (!agent) return usage('bench --review needs --agent (or $LORE_AGENT)');
+        const started = Date.now();
+        benchReview(root, resolvePath(root, casesPath), {
+          agent,
+          scope: args.flags.has('--all') ? 'all' : args.flags.has('--selected') ? 'selected' : undefined,
+          jobs: int(args, '--jobs', 8, 1),
+          timeoutMs: int(args, '--timeout', 300, 1) * 1000,
+          rev: args.flags.get('--rev')?.[0],
+          hide: args.flags.get('--hide'),
+          only: args.flags.get('--only')?.[0]?.split(',').map((x) => x.trim()),
+          onResult: (r) => process.stderr.write(`${(r.error ? 'error' : `${r.caught.length}/${r.caught.length + r.missed.length} caught, ${r.falseAlarms.length} alarms`).padEnd(24)} ${r.id}\n`),
+        })
+          .then(({ results, summary }) => {
+            print(json, { agent, mode: 'review', seconds: Math.round((Date.now() - started) / 1000), summary, results }, () => reviewBenchText(results, summary));
+            process.exit(summary.missed ? 1 : 0);
+          })
+          .catch((err: Error) => {
+            process.stderr.write(`lore: ${err.message}\n`);
+            process.exit(2);
+          });
+        return -1;
+      }
       const started = Date.now();
       bench(root, resolvePath(root, casesPath), {
         agent,

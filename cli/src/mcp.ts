@@ -60,17 +60,16 @@ export const TOOLS: Tool[] = [
     name: 'lore_review',
     title: 'Review a change',
     description:
-      'What a change could break: the claims it reaches (with severity and why), what rests on each, and the prompt for checking each reached invariant. alsoCheck lists the other invariants to check when the graph is small, because selection misses callers and other files; get their prompts with lore_check_context. Answer each prompt from the code ("VERDICT: holds|broken|unsure"), then call lore_record for those that hold. Decisions and notes are context, not checked.',
-    inputSchema: { type: 'object', properties: { range, max: { type: 'integer', default: 50, description: 'Check every invariant up to this many.' } } },
+      'What a change could break: the diff, the claims it reaches (with severity and why), what rests on each, and every active invariant. For each invariant the change could affect, including through a new code path no marker covers, judge whether this change breaks the guarantee it protects (lore_show gives its rationale and code): holds, broken, preexisting (broken before, not worse) or unsure. Then call lore_record for those that hold. Decisions and notes are context, not checked.',
+    inputSchema: { type: 'object', properties: { range } },
     annotations: readOnly,
     run: (root, i) => {
-      const r = reviewContext(loadGraph(root), { range: (i.range as string | undefined) ?? 'HEAD', max: Number(i.max ?? 50) });
-      const reached = r.items.filter((x) => x.severity);
+      const r = reviewContext(loadGraph(root), { range: (i.range as string | undefined) ?? 'HEAD' });
       return {
         range: r.range,
-        scope: r.scope,
-        reached: reached.map(({ ref, kind, statement, severity, reasons, downstream, checked, question, prompt }) => ({ ref, kind, statement, severity, reasons, downstream, checked, question, prompt })),
-        alsoCheck: r.items.filter((x) => !x.severity && x.checked).map((x) => x.ref),
+        diff: r.diff,
+        reached: r.items.filter((x) => x.severity).map(({ ref, kind, statement, severity, reasons, downstream, checked }) => ({ ref, kind, statement, severity, reasons, downstream, checked })),
+        invariants: r.items.filter((x) => !x.severity && x.checked).map(({ ref, statement }) => ({ ref, statement })),
       };
     },
   },

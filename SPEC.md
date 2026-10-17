@@ -297,20 +297,20 @@ A **review** answers "what could this change break, and does it?" It runs the ve
 over a change:
 
 1. **Select.** Staleness detection (§5.3) lists the claims the change reaches, with severity. Deterministic.
-2. **Ask.** Each claim becomes a question: its `ask:`, or one built from its first paragraph by a fixed template per kind. Deterministic, so two runs ask the same thing.
-3. **Check.** An agent reads the claim, its question, the code that upholds it and the same-file definitions that code uses, and gives a verdict: **holds**, **broken** or **unsure**. The verdict is about the claim, never the wording of the question, and about what the code does, not what tests, comments or names say it should do. A missing or unclear verdict is **unsure**, never holds.
+2. **Triage.** One model call reads the diff beside every active invariant (its statement and the guarantee its rationale gives) and names the ones the change could break, including through a code path it adds that no marker covers. Selection only sees what is marked; triage sees what is new. <!-- @lore layers#DEC-8 -->
+3. **Check.** For each invariant selected or triaged, an agent reads the claim, its rationale, the code that upholds it, the same-file definitions that code uses, **and the diff**, and judges the change: **holds** (still true after it), **broken** (this change breaks or weakens it), **preexisting** (already broken before it, not made worse) or **unsure**. The verdict is about the guarantee the claim protects, in every path the change adds, not only its marked code or literal wording; and about what the code does, not what tests, comments or names say. A missing or unclear verdict is **unsure**, never holds. <!-- @lore cli#DEC-13 -->
 4. **Record.**
    - **Agreement:** the claim is **verified** at that commit, recorded as a `Lore-Verified: ref` trailer or a line in the PR. Tools MUST NOT write the trailer for a claim no check judged to hold. A claim's freshness is measured from its latest verification, or its node's `verified` date, whichever is later. <!-- @lore freshness#DEC-5 -->
-   - **Disagreement:** the gate fires (§9), and the review shows the agent's reasons.
+   - **Disagreement:** the gate fires (§9), and the review shows the agent's reasons. A `preexisting` verdict doesn't fail the change; it reports a claim to fix.
 
-Steps 1, 2 and 4 are deterministic (L3); only step 3 needs a model (L4). <!-- @lore layers#DEC-4 -->
+Step 1 and the asking and recording are deterministic (L3); triage and checks need a model (L4).
+<!-- @lore layers#DEC-4 -->
 
-**Scope.** Selection saves cost; it isn't what makes a review correct. A review SHOULD check every
-active invariant when the graph has few enough to afford it, and use selection to order them, most
-affected first. The threshold is the tool's to choose and SHOULD be shown in the review (the
-reference CLI uses 50; on GameRelay, 21 invariants check in about 80 seconds).
-Above that, it checks what selection reaches, and a **sweep** checks every invariant on a
-schedule. <!-- @lore layers#DEC-7, freshness#NOTE-2 -->
+**Scope.** Triage replaces checking every invariant: one call sees the whole graph against the
+change, and the checks go where it points. If triage fails or answers nothing usable, a tool MUST
+check every invariant rather than none. A tool MAY skip triage and check every invariant against
+the change. Without a diff (a schedule, a new repository), a **sweep** checks every invariant
+against the code as it is. <!-- @lore freshness#NOTE-2 -->
 
 **Downstream.** A review lists what rests on each reached claim (trace down, §7.2). Lore names the
 guarantees at stake; following the code from there is the reviewer's job.
@@ -347,6 +347,8 @@ assume. <!-- @lore freshness#DEC-10 -->
 
 A **benchmark** is a set of cases, each an exact edit that breaks a claim or leaves it intact,
 applied in a throwaway copy of the repository that the checking agent can't read the cases from.
+Cases SHOULD include feature-sized changes (recorded diffs of real work) scored as whole reviews:
+one-line breaks beside marked code flatter a review, because something already points at the claim.
 It reports:
 
 | Measure | Question | Where it points |
@@ -455,6 +457,7 @@ Tools MUST read v0.1 to v0.3 graphs:
 
 - **Independent cases.** Checks gave no false confirmations in 53 checks of broken claims on GameRelay (§10), but the same model wrote the breaks. How do checks do on cases a person writes?
 - **Decision checks.** Does the decision template (§8) find real drift, or only noise?
+- **Triage misses.** Triage found every expected break in the first benchmarks (§10); how often does it skip a claim a change really breaks, on graphs of hundreds of invariants?
 - **Inferable decisions.** On GameRelay, 4 of 26 decisions were inferred from the code in both of two runs, because a code comment already gave the reason. Should a decision whose reason lives in a comment leave the graph, or stay as the one place that names what was rejected?
 - **Goodhart.** Will authors write claims that are easy to verify rather than important? Inferability is one guard.
 - **Ignored paths.** Test fixtures and generated code hold example markers. A root `ignore:` list, or nothing until a second repository needs it?

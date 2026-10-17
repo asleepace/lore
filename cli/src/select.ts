@@ -75,16 +75,22 @@ export function parseDiff(text: string): Diff {
   return { changed, removedRefs, addedRefs, removedHeadings };
 }
 
-/** `git diff -U0` for a range (`a..b`), a single revision (against the work tree), or staged changes. */
-export function diffFor(root: string, range: string | undefined, staged = false): Diff {
+/**
+ * `git diff` for a range (`a..b`), a single revision (against the work tree), or staged changes.
+ * --relative: paths relative to `root`, as the graph's are, when the graph lives in a subfolder.
+ * Fixed prefixes, whatever the user's diff.noprefix or diff.mnemonicPrefix says.
+ */
+export function diffText(root: string, range: string | undefined, staged = false, context = 0): string {
   assertRev(range);
-  // --relative: paths relative to `root`, as the graph's are, when the graph lives in a subfolder.
-  // Fixed prefixes, whatever the user's diff.noprefix or diff.mnemonicPrefix says.
-  const args = ['diff', '-U0', '--no-color', '--no-ext-diff', '--relative', '--src-prefix=a/', '--dst-prefix=b/'];
+  const args = ['diff', `-U${context}`, '--no-color', '--no-ext-diff', '--relative', '--src-prefix=a/', '--dst-prefix=b/'];
   if (staged) args.push('--cached');
   if (range) args.push(range);
   args.push('--');
-  return parseDiff(git(root, args));
+  return git(root, args);
+}
+
+export function diffFor(root: string, range: string | undefined, staged = false): Diff {
+  return parseDiff(diffText(root, range, staged));
 }
 
 const BY_KIND: Record<Claim['kind'], Severity> = { INV: 'high', DEC: 'medium', NOTE: 'low' };

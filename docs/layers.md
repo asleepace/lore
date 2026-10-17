@@ -77,6 +77,15 @@ DEC-2 assumed selection was what made checking cheap and correct. The GameRelay 
 Rejected: checking only selected claims at any size (DEC-2), which misses breaks in callers and other files. Rejected: always checking everything, which stops scaling past a few hundred invariants.
 
 - depends: freshness#NOTE-2, freshness#DEC-10
+- superseded_by: layers#DEC-8
+
+### DEC-8
+A review triages: one model call reads the diff beside every invariant and names those the change could break; they, and the selected ones, are checked against the change.
+
+DEC-7 checked every invariant, but against its marked code, so it missed breaks in paths the change added: in the GameRelay A/B run it caught none of 6 real breaks in feature work, at 21 checks a review ([cli#NOTE-8](cli.md#note-8)). Triage reads the change once with the whole graph in view, so a new chat path that lets a player pose as another is flagged against room#INV-4 even though its marker is on `send`. On the same 12 changes, triage plus change-focused checks caught all 6 with about 5 calls a review instead of 21. A triage that fails falls back to checking everything, never nothing.
+Rejected: checking every invariant against the change (DEC-7 with the diff), which costs four times as much for the same catches on this benchmark; kept as `review --all`. Rejected: a model in selection, which would break [freshness#INV-1](freshness.md#inv-1): selection stays deterministic, and triage is the L4 layer above it.
+
+- depends: cli#DEC-13, cli#NOTE-8
 
 ## Quirks
 
