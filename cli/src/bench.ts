@@ -24,19 +24,36 @@ export interface Edit {
   replace: string;
 }
 
+export type Expected = 'broken' | 'holds' | 'either';
+
 export interface BenchCase {
   id: string;
-  ref: string;
-  /** `broken`: the edits break the claim. `holds`: they don't (or there are none: a clean control). */
-  expect: 'broken' | 'holds';
+  /** The claim a one-claim case is about; with `expect: "broken" | "holds"`. */
+  ref?: string;
+  /**
+   * `broken`: the edits break the claim. `holds`: they don't (or there are none: a clean control).
+   * Or, for `--review`, a map from refs to what the change does to each (`either` for a contested
+   * call); every invariant not listed is expected not to be broken by the change.
+   */
+  expect: 'broken' | 'holds' | Record<string, Expected>;
   edits?: Edit[];
+  /** A recorded diff to apply (`git apply`), relative to the cases file: a feature-sized case. */
+  patch?: string;
   note?: string;
 }
 
 export interface BenchFile {
   /** Paths removed from every worktree before checking, so the agent can't read the answers. */
   hide?: string[];
+  /** The revision every case starts from, when `--rev` doesn't say. Default HEAD. */
+  rev?: string;
   cases: BenchCase[];
+}
+
+/** A case's expectations as a map, whichever form it was written in. */
+export function expectations(c: BenchCase): Record<string, Expected> {
+  if (typeof c.expect === 'string') return { [normalizeRef(c.ref!)]: c.expect };
+  return Object.fromEntries(Object.entries(c.expect).map(([r, e]) => [normalizeRef(r), e]));
 }
 
 export interface CaseResult {
@@ -82,9 +99,15 @@ export function readBench(path: string): BenchFile {
   const file = Array.isArray(data) ? { cases: data } : data;
   const ids = new Set<string>();
   for (const c of file.cases) {
-    if (!c.id || !c.ref || (c.expect !== 'broken' && c.expect !== 'holds')) throw new Error(`case ${c.id ?? '?'}: needs id, ref and expect (broken|holds)`);
+    if (!c.id) throw new Error('every case needs an id');
+    if (typeof c.expect === 'string') {
+      if (!c.ref || (c.expect !== 'broken' && c.expect !== 'holds')) throw new Error(`case ${c.id}: needs ref and expect (broken|holds)`);
+    } else if (!c.expect || typeof c.expect !== 'object' || Object.values(c.expect).some((e) => !['broken', 'holds', 'either'].includes(e))) {
+      throw new Error(`case ${c.id}: expect is broken|holds, or a map of refs to broken|holds|either`);
+    }
     if (ids.has(c.id)) throw new Error(`case ${c.id}: duplicate id`);
-    if (c.expect === 'broken' && !c.edits?.length) throw new Error(`case ${c.id}: a broken case needs edits`);
+    if (Object.values(expectations(c)).includes('broken') && !c.edits?.length && !c.patch) throw new Error(`case ${c.id}: a broken case needs edits or a patch`);
+    if (c.patch) assertInside(c.patch);
     ids.add(c.id);
   }
   return file;
@@ -112,7 +135,7 @@ export interface BenchOptions {
   agent?: string;
   jobs?: number;
   timeoutMs?: number;
-  /** The revision each worktree starts from. Default HEAD. */
+  /** The revision each worktree starts from. Default the cases file's `rev`, else HEAD. */
   rev?: string;
   hide?: string[];
   only?: string[];
@@ -126,7 +149,10 @@ function outcomeOf(expect: BenchCase['expect'], verdict: Verdict): CaseResult['o
 }
 
 async function runCase(root: string, c: BenchCase, opts: BenchOptions, hide: string[]): Promise<CaseResult> {
-  const base: CaseResult = { id: c.id, ref: normalizeRef(c.ref), expect: c.expect, selected: null, others: [], edits: !!c.edits?.length, outcome: 'unchecked' };
+  if (typeof c.expect !== 'string' || c.patch) {
+    return { id: c.id, ref: '', expect: 'broken', selected: null, others: [], edits: true, outcome: 'error', error: 'a case with a patch or a map of expectations needs --review' };
+  }
+  const base: CaseResult = { id: c.id, ref: normalizeRef(c.ref!), expect: c.expect, selected: null, others: [], edits: !!c.edits?.length, outcome: 'unchecked' };
   try {
     return await withWorktree(root, opts.rev, async (dir) => {
       applyEdits(dir, c.edits ?? []);
@@ -165,7 +191,7 @@ export async function bench(root: string, casesPath: string, opts: BenchOptions 
   const worker = async () => {
     while (next < cases.length) {
       const i = next++;
-      results[i] = await runCase(root, cases[i]!, opts, hide);
+      results[i] = await runCase(root, cases[i]!, { ...opts, rev: opts.rev ?? file.rev }, hide);
       opts.onResult?.(results[i]!);
     }
   };

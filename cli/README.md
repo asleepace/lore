@@ -48,24 +48,39 @@ lore review main..HEAD --agent "claude -p --tools Read,Glob,Grep"
 ```
 
 ```
-## Lore review: main..HEAD
+## Lore review: HEAD
 
-The change reaches 1 claim; every invariant is checked (21, few enough to afford).
+The change reaches 5 claims; triage read the change against all 21 invariants and flagged 5.
 
-### ✗ broken: room#INV-3 (INV, high)
+### ✗ broken: room#INV-4 (INV)
 
-State patches can't use the keys `__proto__`, `constructor` or `prototype`.
+A relayed message's sender (`from`) and time (`at`) are stamped by the room, never taken from the frame.
 
-- **Reached:** changed UNSAFE_KEYS (apps/server/src/room/Room.ts:56), used by the marker at 543
-- **Rests on it:** room#INV-2 (same code as room#INV-3: apps/server/src/room/Room.ts:543)
+- **Flagged by triage:** The room now stamps `from` with a client-supplied `as` value when the
+  sender is host, so the relayed sender is no longer always the actual connection's identity …
 
-> `UNSAFE_KEYS` no longer lists `'__proto__'` (Room.ts:57), so a patch with that key passes …
+> The `send` relay path is unchanged. … The change adds a client-controlled sender to the chat
+> path, which is also a room-relayed message. In `Room.ts` (around lines 636-648 of the diff),
+> `message.as` now becomes `sender` when the caller is the host, and that value is written into
+> the broadcast `ChatMessage` as `from: sender`. …
 
-### Not reached by the change: 20 of 20 invariants hold
+### ✓ holds: protocol#INV-1 (INV)
+…
+14 invariants not flagged by triage, so not checked.
 ```
 
+(GameRelay, the A/B run's T3-without-1 change, abridged. The marker for room#INV-4 is on the `send`
+path, so selection never reached it.)
+
+How it works: selection finds the claims whose marked code the change touches; **triage** (one
+model call) reads the diff beside every invariant and flags the ones it could break, including
+through new code no marker covers; each of those is checked **against the change**, with the diff,
+by the guarantee its rationale gives: `holds`, `broken`, `preexisting` (broken before, not made
+worse) or `unsure`. `--all` skips triage and checks every invariant against the change;
+`--selected` checks only what selection reaches. If triage fails, every invariant is checked.
+
 Decisions and notes the change reaches are listed as context, not checked. Without `--agent`,
-`review` prints the context and questions, for an agent that is itself the model.
+`review` prints the context and prompts, for an agent that is itself the model.
 
 ## The loop, one step at a time
 
@@ -122,6 +137,19 @@ selection reached the claim and what the check said, and reports false confirmat
 a broken claim), false alarms, unsure answers, and selection noise (other claims each edit reached,
 since recall alone would reward selecting everything). The cases file and `hide` paths are deleted from
 each worktree first, so the agent can't read the answers. Without an agent it scores selection only.
+
+`--review` scores the whole review per case, as it would run on a pull request. A case can be a
+recorded patch of real feature work with a map of what it breaks; every other invariant is
+expected to survive, so false alarms count across the whole graph:
+
+```json
+{ "rev": "e8ac2e5",
+  "cases": [{ "id": "T3-without-1", "patch": "cases/T3-without-1.patch", "expect": { "room#INV-4": "broken" } }] }
+```
+
+It reports breaks caught and missed (and whether triage skipped them), false alarms, `preexisting`
+verdicts and model calls. One-line breaks beside marked code flatter a review; feature-sized
+patches don't (cli#NOTE-8).
 
 ## Measuring: infer
 

@@ -129,7 +129,7 @@ The verification loop's value depends on how often this happens. `lore bench` me
 ### NOTE-2
 Selection sees marker regions and the same-file definitions they use, so a change in a caller or another file reaches nothing; reviews check every invariant to cover it.
 
-DEC-9 added the definitions; [layers#DEC-7](layers.md#dec-7) makes checking every invariant the default when the graph is small.
+DEC-9 added the definitions; triage ([layers#DEC-8](layers.md#dec-8)) reads the change against every invariant, so a review no longer depends on selection reaching the claim.
 
 In the GameRelay trial, removing `'__proto__'` from `UNSAFE_KEYS`, defined about 500 lines above the marked check, selected no claim, while a check with Claude, asked directly, found the break. Marking the definition fixed that case; the sweep (`lore check --sweep`) is for the cases nobody marked.
 

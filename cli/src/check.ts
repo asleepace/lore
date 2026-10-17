@@ -8,7 +8,8 @@ import { definitionsUsed } from './defs';
 import type { Claim, ClaimRecord, Graph } from './types';
 import { normalizeRef } from './util';
 
-export type Verdict = 'holds' | 'broken' | 'unsure';
+/** `preexisting`: the code broke the claim before the change under review, which doesn't make it worse. */
+export type Verdict = 'holds' | 'broken' | 'preexisting' | 'unsure';
 
 export interface CheckRecord extends ClaimRecord {
   prompt: string;
@@ -21,6 +22,8 @@ export interface CheckRecord extends ClaimRecord {
 const CONTEXT_LINES = 8;
 const MAX_SNIPPET_LINES = 80;
 const MAX_PROMPT_CHARS = 16_000;
+/** A review's prompts carry the diff, so they get more room; a longer diff is cut. */
+const MAX_DIFF_CHARS = 24_000;
 const KIND_WORDS: Record<Claim['kind'], string> = {
   INV: 'an invariant: it must always hold, and breaking it is a bug',
   DEC: 'a decision: a choice the code follows, with alternatives that were rejected',
@@ -55,10 +58,12 @@ function definitionSnippets(root: string, file: string, from: number, to: number
  * question only says where to look. Deterministic: the same graph and files give the same prompt.
  */
 // @lore cli#DEC-6
-export function promptFor(graph: Graph, c: Claim): string {
+export function promptFor(graph: Graph, c: Claim, change?: { diff: string; why?: string }): string {
   const node = graph.nodes.get(c.node)!;
   const parts: string[] = [
-    'You are checking one claim from a Lore knowledge graph against the code in this repository.',
+    change
+      ? 'You are reviewing a change against one claim from a Lore knowledge graph: does this change break it?'
+      : 'You are checking one claim from a Lore knowledge graph against the code in this repository.',
     '',
     `Claim: ${c.ref}, ${KIND_WORDS[c.kind]}.`,
     `Node: ${node.title}: ${node.lead}`,
@@ -78,6 +83,7 @@ export function promptFor(graph: Graph, c: Claim): string {
   const defs = [...new Set(marks.flatMap((m) => definitionSnippets(graph.root, m.file, m.line, m.endLine)))];
   if (defs.length) parts.push('Definitions the code above uses, from elsewhere in the same file:', '', ...defs, '');
   if (list(c.meta.tests).length) parts.push(`Tests that enforce it: ${list(c.meta.tests).join(', ')}`, '');
+  if (change) return changeTail(parts, change);
   parts.push(
     'Answer on the first line with exactly one of:',
     'VERDICT: holds',
@@ -91,6 +97,34 @@ export function promptFor(graph: Graph, c: Claim): string {
   return prompt;
 }
 
+/**
+ * The rest of a review prompt (SPEC.md §8): the diff, and a verdict about the change. The claim is
+ * judged by the guarantee it protects, in every path the change adds, not only its marked code: a
+ * check that only reads the marked code misses a break in a new code path (cli#NOTE-8).
+ */
+// @lore cli#DEC-13
+function changeTail(parts: string[], change: { diff: string; why?: string }): string {
+  const diff = change.diff.length > MAX_DIFF_CHARS ? change.diff.slice(0, MAX_DIFF_CHARS) + '\n[diff truncated; read the files for the rest]\n' : change.diff;
+  if (change.why) parts.push(`Why this claim is being checked: ${change.why}`, '');
+  parts.push(
+    'The change under review (git diff; the files on disk already include it):',
+    '',
+    '```diff',
+    diff.trimEnd(),
+    '```',
+    '',
+    'Answer on the first line with exactly one of:',
+    'VERDICT: holds        (after this change, the claim is still true)',
+    'VERDICT: broken       (this change breaks or weakens it)',
+    'VERDICT: preexisting  (the code already broke it before this change, and the change does not make it worse)',
+    'VERDICT: unsure',
+    'Then explain in at most five sentences, citing file:line.',
+    'Judge the guarantee the claim protects: the rationale says why it exists, and a change can break that guarantee while keeping the literal wording. Look at every code path the change adds or alters, including ones no marker points at, and the code they reach. Judge what the code does, not what tests, comments or names say it should do; read anything the verdict depends on, or answer unsure.',
+  );
+  const prompt = parts.join('\n');
+  return prompt.length > MAX_PROMPT_CHARS + MAX_DIFF_CHARS ? prompt.slice(0, MAX_PROMPT_CHARS + MAX_DIFF_CHARS) + '\n[truncated]\n' : prompt;
+}
+
 /** Every active invariant, in the map's reading order: what a sweep checks (SPEC.md §8). */
 export function sweepTargets(graph: Graph): { ref: string }[] {
   const order = (id: string) => (id === 'lore' ? -1 : graph.nodes.get(id)!.order);
@@ -102,7 +136,7 @@ export function sweepTargets(graph: Graph): { ref: string }[] {
 
 /** The first `VERDICT: …` line in an answer; anything else is `unsure`. */
 export function parseVerdict(answer: string): Verdict {
-  const m = /VERDICT:\s*\**\s*(holds|broken|unsure)\b/i.exec(answer);
+  const m = /VERDICT:\s*\**\s*(holds|broken|preexisting|unsure)\b/i.exec(answer);
   return (m?.[1]?.toLowerCase() as Verdict | undefined) ?? 'unsure';
 }
 

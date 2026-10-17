@@ -112,12 +112,12 @@ Rejected: generated mutations, which can't tell a break from a change that keeps
 - depends: freshness#NOTE-1
 
 ### DEC-11
-`lore review <range>` is the review in one command: the claims a change reaches, what rests on them, and with an agent, a verdict on every invariant up to 50.
+`lore review <range>` is the review in one command: the claims a change reaches, what rests on them, and with an agent, verdicts about the change.
 
-The pieces existed (`select`, `trace`, `check`), but a reviewing agent shouldn't have to compose three commands to answer one question. Selection orders the claims and marks the ones the change reached; the rest are checked because selection misses callers and other files ([layers#DEC-7](layers.md#dec-7)). Without an agent it prints the review context, for an agent that is itself the model. Checks run in parallel (`--jobs`), so a review of tens of invariants takes about as long as the slowest one.
+The pieces existed (`select`, `trace`, `check`), but a reviewing agent shouldn't have to compose three commands to answer one question. Selection marks the claims the change reached; triage flags the ones it could break elsewhere ([layers#DEC-8](layers.md#dec-8)); each is checked against the change ([DEC-13](#dec-13)). Without an agent it prints the review context, for an agent that is itself the model. Checks run in parallel (`--jobs`), so a review of tens of invariants takes about as long as the slowest one.
 Rejected: a review that only checks selected claims, which caught 17 of 27 benchmark breaks against 27 of 27.
 
-- depends: layers#DEC-7
+- depends: layers#DEC-8
 
 ### DEC-12
 `lore infer` measures inferability in two steps: a blind answer from a claim's anchored code, in a worktree without the graph, then a graded comparison with the claim.
@@ -126,6 +126,22 @@ Asking a claim's own question without the graph hands the agent the claim; "yes,
 Rejected: the claim's own question without the graph, which leaks the answer. Rejected: string similarity between the answer and the claim, which can't tell a paraphrase from a different rule. Rejected: grading in the blind call, which lets the agent see the claim.
 
 - depends: freshness#DEC-10
+
+### DEC-13
+A review's check gets the diff and judges the change: holds, broken by it, preexisting (broken before, not made worse) or unsure, by the guarantee the claim protects.
+
+A check that asks "does this claim hold?" reads the claim's marked code, which a change adding a new path leaves intact: it said room#INV-4 holds while a new chat path let the host post as anyone. Given the diff and asked "does this change break it?", the same model caught it. `preexisting` separates a change's breaks from a claim's old problems: every false alarm in the A/B run was a claim that had been wrong before the change (sdk#INV-1's member list, protocol#INV-1's history). The prompt points at the rationale, since a claim's first sentence can state a mechanism while its rationale states the guarantee (format#DEC-15).
+Rejected: the state check with the diff merely attached, which still frames the question as "is this true?"; the verdict has to be about the change.
+
+- depends: format#DEC-15
+
+### DEC-14
+`lore bench --review` scores the whole review per case: recorded patches of feature work, each with a map of the invariants it breaks; every other invariant is expected to survive.
+
+The one-claim bench asked "given this claim, is the break found?", which assumes something already pointed at the claim; a reviewer has no such pointer, and the A/B run's breaks were in code no marker covered. Scoring the full review counts what matters on a pull request: expected breaks caught or missed (and whether triage skipped them), false alarms across the whole graph, and model calls. Patches from real agent runs are feature-sized by construction. Hidden files are committed away before the case is applied, so the answers are never in the diff the review reads. A contested call is `either`.
+Rejected: regenerating feature changes for each run, which costs an agent run per case and changes the case every time.
+
+- depends: cli#DEC-10, freshness#DEC-10
 
 ## Notes
 
@@ -172,6 +188,13 @@ Reviewing this CLI, an open-ended model review and `lore review` found different
 Two passes by a model that hadn't seen the code found 18 defects no claim covered, among them a git option injection through the MCP tools' range argument, `record verified` stamping claims nobody checked, and a diff parser that read `++i;` as a header. `lore review` found three the open-ended passes missed, each a stated guarantee: an unchecked edit path in `bench` (INV-4), markers for unknown prefixes raising errors (layers#INV-3), and titled headings slipping past the deletion gate (format#INV-2). The record bug became INV-5. Open-ended review finds what nobody wrote down; the graph keeps what was found from coming back.
 
 - depends: cli#INV-5, cli#DEC-11
+
+### NOTE-8
+Reviews that read the change caught all 6 real breaks in the GameRelay A/B feature work; checking invariants against their marked code caught none, at four times the calls.
+
+Measured with `bench --review` on the 12 recorded A/B changes (gamerelay.io `eval/lore-ab/cases.json`). Before (DEC-11, state checks of all 21 invariants): 0 of 6 caught, 10 false alarms, 252 model calls. After (triage, then change-focused checks, layers#DEC-8 and DEC-13): 6 of 6 caught, none skipped by triage, 58 calls. Its only other "broken" verdicts, room#INV-5 on all four host-reconnect changes, turned out real: the reclaim skips the election, so a host that dropped while hidden takes the role back from a visible stand-in; the blind A/B judge had missed it, so the cases mark it contested. Restating three GameRelay claims as guarantees changed nothing here (6 of 6 again, one new false alarm): the checks already read the rationale. On the 45 one-line cases the review caught 26 of 27 in 88 calls; the miss, a runtime dependency declared but never imported or published, is arguable, and 6 flags on related claims in three cases are unadjudicated. A manual rerun that skipped the bench's hiding read the answer key from the worktree, which is why the bench commits hidden files away first.
+
+- depends: cli#DEC-14, layers#DEC-8
 
 ## Pipelines
 
