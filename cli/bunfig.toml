@@ -1,0 +1,3 @@
+[test]
+# Several tests spawn the CLI a dozen times over real git repositories.
+timeout = 30000

@@ -1,0 +1,86 @@
+name: Lore
+description: Lint a Lore graph, list the claims a pull request might break, and check its invariant gates.
+author: asleepace
+branding:
+  icon: book-open
+  color: orange
+
+inputs:
+  directory:
+    description: Repository directory holding LORE.md.
+    default: .
+  policy:
+    description: Gate policy (off, warn, block). Empty uses the gate field of LORE.md on the base branch, so a pull request can't loosen its own gate.
+    default: ''
+  base:
+    description: Base ref to compare with. Defaults to the pull request's base branch.
+    default: ''
+  lint:
+    description: Fail the job on lint errors.
+    default: 'true'
+
+outputs:
+  unmet:
+    description: Number of unmet invariant gates.
+    value: ${{ steps.gate.outputs.unmet }}
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+
+    - name: Install the lore CLI
+      shell: bash
+      working-directory: ${{ github.action_path }}/cli
+      run: bun install --frozen-lockfile --production || bun install --production
+
+    - name: Lint
+      shell: bash
+      env:
+        LORE: bun ${{ github.action_path }}/cli/src/bin.ts
+        DIR: ${{ inputs.directory }}
+        FAIL: ${{ inputs.lint }}
+      run: |
+        set +e
+        $LORE -C "$DIR" lint > lore-lint.txt
+        code=$?
+        set -e
+        cat lore-lint.txt
+        { echo '### Lore: lint'; echo '```'; cat lore-lint.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+        # 1 is lint errors (fails only with lint: true); 2 is a graph that couldn't be read at all (always fails).
+        if [ "$code" = "2" ] || { [ "$FAIL" = "true" ] && [ "$code" != "0" ]; }; then exit 1; fi
+
+    - name: Claims this change reaches
+      id: gate
+      shell: bash
+      env:
+        LORE: bun ${{ github.action_path }}/cli/src/bin.ts
+        DIR: ${{ inputs.directory }}
+        POLICY: ${{ inputs.policy }}
+        BASE: ${{ inputs.base || github.base_ref }}
+        # The PR description is passed through the environment, never interpolated into the script.
+        PR_BODY: ${{ github.event.pull_request.body }}
+      run: |
+        if [ -z "$BASE" ]; then echo "No base ref (not a pull request?): skipping selection and gates."; echo "unmet=0" >> "$GITHUB_OUTPUT"; exit 0; fi
+        git -C "$DIR" fetch --quiet origin "$BASE"
+        RANGE="origin/$BASE...HEAD"
+        # Unless given, the policy comes from LORE.md on the base branch, never the pull request's own copy.
+        if [ -n "$POLICY" ]; then POLICY_ARGS=(--policy "$POLICY"); else POLICY_ARGS=(--base-policy "origin/$BASE"); fi
+        printf '%s' "$PR_BODY" > "$RUNNER_TEMP/lore-pr.md"
+        $LORE -C "$DIR" select "$RANGE" --no-covers > lore-select.txt
+        set +e
+        $LORE -C "$DIR" gate "$RANGE" --message "$RUNNER_TEMP/lore-pr.md" "${POLICY_ARGS[@]}" > lore-gate.txt
+        code=$?
+        $LORE -C "$DIR" gate "$RANGE" --message "$RUNNER_TEMP/lore-pr.md" --json > lore-gate.json
+        set -e
+        cat lore-select.txt lore-gate.txt
+        unmet=$(bun -e 'const r = JSON.parse(require("fs").readFileSync("lore-gate.json", "utf8")); console.log(r.results.filter((x) => x.status === "unmet").length)')
+        echo "unmet=$unmet" >> "$GITHUB_OUTPUT"
+        {
+          echo '### Lore: claims this change reaches'; echo '```'; cat lore-select.txt; echo '```'
+          echo '### Lore: invariant gates'; echo '```'; cat lore-gate.txt; echo '```'
+          if [ "$unmet" != "0" ]; then
+            echo 'Update the claim, verify it (`lore review`), or add the `Lore-Ack:` line above to a commit, or to the PR description (the workflow must run on `edited` to see a new description).'
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+        exit $code

@@ -1,0 +1,19 @@
+{
+  "name": "lore-cli",
+  "version": "0.3.0-draft",
+  "description": "Small, composable tools for Lore graphs: lint, digest, select, ask, gate, history, record.",
+  "private": true,
+  "type": "module",
+  "bin": { "lore": "./dist/lore.js" },
+  "scripts": {
+    "lore": "bun src/bin.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/bin.ts --target=node --outfile=dist/lore.js"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "5.9.3"
+  },
+  "license": "MIT"
+}
