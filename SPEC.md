@@ -181,8 +181,8 @@ A claim MAY end with a list of `- key: value` items:
 
 | Key | Meaning |
 |---|---|
-| `tests` | Tests that enforce the claim (comma-separated paths). |
-| `files` | Files that uphold the claim but can't carry a marker (JSON, lockfiles, config). |
+| `tests` | Tests that enforce the claim (comma-separated paths from the repository root). Each MUST exist (`L024`). |
+| `files` | Files that uphold the claim but can't carry a marker (JSON, lockfiles, config). Each MUST exist (`L024`). |
 | `depends` | Claims this one rests on (comma-separated full references). An optional hint (§1.2, principle 7). |
 | `ask` | The question a check asks (§8), when the first paragraph doesn't make an obvious one. |
 | `status` | `active` (default) \| `superseded` \| `retired` |
@@ -217,8 +217,8 @@ Only invariants have a trust tier, because only they can be enforced: <!-- @lore
 
 | Tier | Condition |
 |---|---|
-| **tested** | A `tests:` entry, or a marker inside a test file. |
-| **anchored** | A marker, or a `files:` entry. |
+| **tested** | A `tests:` path that exists, or a marker inside a test file. |
+| **anchored** | A marker, or a `files:` path that exists. |
 | **asserted** | Prose only. |
 
 A check never raises a tier: an agent can confirm a false claim, so only tests make a claim
@@ -396,6 +396,7 @@ person or another model are the fairer test.
 | `L021` | warn | Node missing from the map, or listed twice |
 | `L022` | error | A claim in a public folder references a non-public node (§13.1) |
 | `L023` | warn | `depends:` points at a retired or superseded claim |
+| `L024` | error | An active claim's `tests:` or `files:` path doesn't exist |
 
 Codes are never reused, like claim numbers. Retired in v0.3: `L005`, `L007`, `L009`, `L014`, `L020`.
 
@@ -481,6 +482,7 @@ against what the trials used. No format change; the spec is reorganized around w
 - **Measuring trust** (§10): recall, noise, false confirmations, false alarms, inferability, and a task run.
 - **Extensions** (§13): public folders and push, until a trial uses them. L5 is gone from conformance.
 - Invariants SHOULD state guarantees, not enumerate code (§4.1). Versions are strings (§3.1).
+- `tests:` and `files:` paths must exist (`L024`), and only existing paths count toward a tier (§5.2): a deleted test no longer leaves its claim "tested".
 
 ### v0.3 (2026-10-16)
 

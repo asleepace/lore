@@ -3,6 +3,13 @@
 Unsorted findings waiting to be triaged into claims or spec changes. Not a node (`_`-prefixed, see `SPEC.md` §2).
 Triaged findings leave; git keeps them ([lore#DEC-7](../LORE.md#dec-7)).
 
+## Triaged from designing Nexus (2026-10-30)
+
+Dead `tests:` and `files:` paths no longer count toward a tier, and lint says so
+(freshness#INV-2, `L024`). Nexus (asleepace/nexus#1) is a design for rebuilding asleepace.com
+on one protocol; its docs pair every invariant with how it's enforced, which is what surfaced
+this. Its `docs/CONTRACTS.md` takes the same idea into code (findings below).
+
 ## Triaged after the A/B run (2026-10-17)
 
 Reviews that don't read the change (layers#DEC-8, cli#DEC-13, cli#NOTE-8); feature-sized bench
@@ -51,6 +58,30 @@ cli#NOTE-5.
 - **[value] Writing claims finds bugs.** GameRelay's first pass found a state limit counted in
   UTF-16 units while every other limit counts bytes, because a claim had to say exactly what the
   limit counts. Worth saying in the README: the first pass is a code review.
+
+- **[markers] Code that asserts its claims.** Inspired by NASA/JPL's "Power of 10" rule 5
+  (assertion density, with an explicit recovery action), Nexus's `docs/CONTRACTS.md` has functions
+  assert their invariants at run time with the claim's ID: `check(ok, 'room#INV-2')`. A failure
+  then names the claim, so a crash, a log line, a failing test and the doc share one key.
+  **Proposal:** nothing in the format; recommend it in the README, with a marker on the assertion
+  so selection and tiers already see it. A runtime check is stronger than a marker but only fires
+  on code that runs, so it never raises a tier (freshness#DEC-6).
+- **[freshness] Laws plus generated inputs are tests nobody wrote.** A function that states laws
+  (round-trips, bounds, idempotence) checked against inputs generated from its types is a test of
+  its invariants. When those property tests live in test files with markers, Lore already counts
+  them as `tested`. **Proposal:** an adopter observation, not a spec change.
+- **[layers] Live claim status.** If runtime assertion failures are reported by claim ID, an
+  editor or dashboard could turn a claim red the moment production breaks it. **Proposal:** an
+  extension (§13) only if a trial wants it; it needs a store outside git, which principle 5
+  keeps out of the core.
+- **[format] Value checks, considered and rejected.** A claim like "retries are capped at three"
+  could carry a check against the constant in code. That restates the code (principle 1) and
+  asks authors to keep a link in step (principle 7). The right claim is the guarantee the cap
+  protects; the constant gets a marker.
+- **[format] Tables for many short invariants, considered.** Nexus lists 10 to 15 invariants per
+  doc as `| ID | Invariant | Enforced by |` rows. Shorter, but a table row has no stable anchor,
+  which breaks format#INV-3 (IDs are links). **Proposal:** Nexus's repo docs adopt Lore v0.4 as
+  written, which is the better trial.
 
 ## Observations for adopters
 

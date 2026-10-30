@@ -16,6 +16,13 @@ Detecting staleness never requires an LLM.
 
 Detection runs on every PR. It must be deterministic, fast and free, so that the expensive agent step only runs when something is actually affected (see [layers#DEC-2](layers.md#dec-2)).
 
+### INV-2
+A trust tier counts only `tests:` and `files:` paths that exist.
+
+A path to a deleted test used to keep its claim "tested" forever, the one thing a tier must never do (stay true outranks everything, [lore#DEC-6](../LORE.md#dec-6)). Lint flags the dead path (`L024`) and the tier falls back to whatever still backs the claim. Found while designing Nexus, whose docs check that every invariant names a real enforcement.
+
+- tests: cli/test/tiers.test.ts
+
 ## Decisions
 
 ### DEC-1
