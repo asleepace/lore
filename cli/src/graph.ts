@@ -3,6 +3,7 @@ import { basename, dirname, join, posix, relative } from 'node:path';
 import { parseFrontmatter } from './frontmatter';
 import { scanMarkers } from './markers';
 import { parseNode } from './node';
+import { pathsIn } from './tiers';
 import type { Claim, Graph, Issue, LoreNode } from './types';
 import { assertRev, git, normalizeRef, PREFIXES, REF_RX, repoFiles, stripCode } from './util';
 
@@ -197,6 +198,14 @@ function checkReferences(graph: Graph, today: string): void {
         const t = graph.claims.get(normalizeRef(d));
         if (!t) issues.push({ code: 'L001', level: 'error', where: c.ref, message: `depends on unknown ${d}` });
         else if (!t.active) issues.push({ code: 'L023', level: 'warn', where: c.ref, message: `depends on inactive ${d}` });
+      }
+      // @lore freshness#INV-2
+      if (c.active) {
+        for (const key of ['tests', 'files'] as const) {
+          for (const p of pathsIn(c.meta[key])) {
+            if (!existsSync(join(graph.root, p))) issues.push({ code: 'L024', level: 'error', where: c.ref, message: `${key}: ${p} doesn't exist` });
+          }
+        }
       }
       if (c.meta.superseded_by && !graph.claims.has(normalizeRef(c.meta.superseded_by))) {
         issues.push({ code: 'L001', level: 'error', where: c.ref, message: `superseded by unknown ${c.meta.superseded_by}` });
