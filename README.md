@@ -36,6 +36,15 @@ Every layer is opt-in. If all tooling is deleted, the docs remain valid, useful 
 
 Early design. See [`SPEC.md`](SPEC.md) for the v0.1 draft.
 
+The first L2 tool exists: `lore check` lints a repository against SPEC.md §10 and reports trust tiers (§7). It needs only [Bun](https://bun.sh).
+
+```bash
+bun cli/lore.ts check            # lint this repo
+bun cli/lore.ts check ../app     # lint another repo
+bun cli/lore.ts check --json     # machine-readable findings and tiers
+bun test                         # the checker's own tests
+```
+
 ## License
 
 [MIT](LICENSE)

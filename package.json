@@ -1,0 +1,11 @@
+{
+  "name": "lore",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "lore": "cli/lore.ts" },
+  "scripts": {
+    "check": "bun cli/lore.ts check",
+    "test": "bun test"
+  }
+}

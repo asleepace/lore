@@ -17,6 +17,7 @@ This repository defines Lore and documents itself with it. `SPEC.md` is the sour
 - [markers](docs/markers.md): how code (or any file) points at claims.
 - [freshness](docs/freshness.md): trust tiers and staleness detection.
 - [layers](docs/layers.md): progressive enhancement, from plain markdown to agents.
+- [contracts](docs/contracts.md): docs that test themselves, and code that asserts the claims it upholds.
 
 ## Invariants
 
